@@ -1,0 +1,26 @@
+package mongo
+
+import scalaz.Free
+import scalaz.concurrent.Task
+import mongo.DbProgram.{ DBFree, MongoAlgebra }
+
+trait Interpreter {
+
+  protected val finalInstruction = "End of program"
+
+  /**
+   *
+   * @param action
+   * @tparam T
+   * @return
+   */
+  def step[T](action: MongoAlgebra[DBFree[T]]): Task[Free[MongoAlgebra, T]]
+
+  /**
+   *
+   * @param program
+   * @param actions
+   * @return
+   */
+  def instructions[T](program: Free[MongoAlgebra, T], actions: List[String] = Nil): List[String]
+}
