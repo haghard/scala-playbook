@@ -14,7 +14,7 @@ trait Interpreter {
    * @tparam T
    * @return
    */
-  def step[T](action: MongoAlgebra[DBFree[T]]): Task[Free[MongoAlgebra, T]]
+  def effect[T](action: MongoAlgebra[DBFree[T]]): Task[Free[MongoAlgebra, T]]
 
   /**
    *

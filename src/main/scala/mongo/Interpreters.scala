@@ -19,7 +19,7 @@ trait JavaMongoDriverInterpreter extends Interpreter {
    * @tparam T
    * @return
    */
-  override def step[T](action: MongoAlgebra[DBFree[T]]): Task[Free[MongoAlgebra, T]] =
+  override def effect[T](action: MongoAlgebra[DBFree[T]]): Task[Free[MongoAlgebra, T]] =
     action match {
       case Insert(collection, obj, next) ⇒
         Task {

@@ -22,10 +22,6 @@ object DbProgram {
     def map[B](f: A ⇒ B): MongoAlgebra[B]
   }
 
-  sealed trait CassandraAlgebra[+A] {
-    def map[B](f: A ⇒ B): CassandraAlgebra[B]
-  }
-
   implicit val functor: Functor[MongoAlgebra] = new Functor[MongoAlgebra] {
     def map[A, B](fa: MongoAlgebra[A])(f: A ⇒ B): MongoAlgebra[B] = fa map f
   }
@@ -116,8 +112,8 @@ final class DbProgram[T <: Interpreter] private (dbName: String, address: InetSo
    * @tparam T
    * @return
    */
-  def step[T](action: MongoAlgebra[DBFree[T]]): Task[DBFree[T]] =
-    delegate.step(action)
+  def effect[T](action: MongoAlgebra[DBFree[T]]): Task[DBFree[T]] =
+    delegate.effect(action)
 
   /**
    *

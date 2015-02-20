@@ -4,6 +4,7 @@ import com.mongodb.{ BasicDBObject, DBObject }
 import de.bwaldvogel.mongo.MongoServer
 import de.bwaldvogel.mongo.backend.memory.MemoryBackend
 import mongo.DbProgram._
+import mongo2.InteractionAlgebra
 import org.specs2.mutable.Specification
 
 import scalaz.{ -\/, \/- }
@@ -40,7 +41,7 @@ class MongoAlgSpec extends Specification {
             rs ← db.findOne(query(id.get("catId").asInstanceOf[Int]))
           } yield rs)
 
-        val task: Task[DBObject] = program.runM(db.step)
+        val task: Task[DBObject] = program.runM(db.effect)
 
         val result = task.attemptRun match {
           case \/-(obj)   ⇒ true
@@ -63,7 +64,7 @@ class MongoAlgSpec extends Specification {
             rs ← db.findOne(query(id.get("catId").asInstanceOf[Int] + 1))
           } yield rs)
 
-        val task: Task[DBObject] = program.runM(db.step)
+        val task: Task[DBObject] = program.runM(db.effect)
 
         val result = task.attemptRun match {
           case \/-(obj)   ⇒ false
@@ -72,6 +73,26 @@ class MongoAlgSpec extends Specification {
         result should ===(true)
       }
       true should be equalTo true
+    }
+  }
+
+  "mongo2.Program" should {
+    "execute" in {
+      val server = new MongoServer(new MemoryBackend())
+      val db = mongo2.Program[InteractionAlgebra](collection, server.bind())
+      val data = new BasicDBObject().append("catId", 99).append("name", "Gardening Tools")
+      val program = (for {
+        id ← db.insert(data)
+        rs ← db.findOne(query(id.get("catId").asInstanceOf[Int]))
+      } yield rs)
+
+      val task: Task[DBObject] = program.runM(db.effect)
+      val r = task.attemptRun match {
+        case \/-(obj)   ⇒ true
+        case -\/(error) ⇒ false
+      }
+
+      r should beTrue
     }
   }
 }
