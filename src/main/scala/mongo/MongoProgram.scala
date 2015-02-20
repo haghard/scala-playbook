@@ -5,16 +5,17 @@ import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicInteger
 
 import de.bwaldvogel.mongo.MongoServer
+import scala.util.{ Failure, Success, Try }
 import scalaz.Free.liftF
 import com.mongodb._
 import scalaz.concurrent.Task
-import scalaz.{ Free, Functor, Monad }
+import scalaz._
 
 trait InterpreterOps[T] {
   def apply(): T
 }
 
-object DbProgram {
+object MongoProgram {
 
   type DBFree[T] = Free[MongoAlgebra, T]
 
@@ -49,7 +50,7 @@ object DbProgram {
    * @return
    */
   def program[T <: Interpreter](implicit dbName: String, address: InetSocketAddress, ops: InterpreterOps[T]) =
-    new DbProgram(dbName, address, ops())
+    new MongoProgram(dbName, address, ops())
 
   /**
    * Available for test only
@@ -59,7 +60,7 @@ object DbProgram {
    * @tparam T
    * @return
    */
-  private[mongo] def withTestMongoServer[T <: Interpreter](server: MongoServer)(f: DbProgram[T] ⇒ Unit)(implicit ops: InterpreterOps[T]) = {
+  private[mongo] def withTestMongoServer[T <: Interpreter](server: MongoServer)(f: MongoProgram[T] ⇒ Unit)(implicit ops: InterpreterOps[T]) = {
     val dbName = "test_db"
     val addr = server.bind
     val core = program[T](dbName, addr, ops)
@@ -82,8 +83,8 @@ object DbProgram {
  * @param address
  *
  */
-final class DbProgram[T <: Interpreter] private (dbName: String, address: InetSocketAddress, interpreter: T) {
-  import DbProgram._
+final class MongoProgram[T <: Interpreter] private (dbName: String, address: InetSocketAddress, interpreter: T) {
+  import MongoProgram._
 
   private val delegate = interpreter
   private val client = new MongoClient(new ServerAddress(address))
@@ -124,7 +125,6 @@ final class DbProgram[T <: Interpreter] private (dbName: String, address: InetSo
    */
   def instructions[T](program: DBFree[T], actions: List[String] = Nil): List[String] =
     delegate.instructions(program, actions)
-
   /**
    *
    *

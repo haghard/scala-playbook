@@ -3,7 +3,7 @@ package mongo
 import java.util.concurrent.Executors
 
 import com.mongodb.WriteConcern
-import mongo.DbProgram._
+import mongo.MongoProgram._
 import org.apache.log4j.Logger
 
 import scala.util.{ Failure, Success, Try }
@@ -31,9 +31,7 @@ trait JavaMongoDriverInterpreter extends Interpreter {
             case Success(obj)   ⇒ obj
             case Failure(error) ⇒ throw new Exception(s"Can't Insert in $collection - $obj", error)
           }
-        } map {
-          next
-        }
+        } map (next)
       case FindOne(collection, query, next) ⇒
         Task {
           logger info (s"Find: $query in $collection")
@@ -41,11 +39,8 @@ trait JavaMongoDriverInterpreter extends Interpreter {
             .fold {
               throw new Exception(s"Can't findOne in $collection by $query")
             } { r ⇒ r }
-        } map {
-          next
-        }
-      case Fail(cause) ⇒
-        Task.fail(cause)
+        } map (next)
+      case Fail(cause) ⇒ Task.fail(cause)
     }
 
   /**

@@ -2,7 +2,7 @@ package mongo
 
 import scalaz.Free
 import scalaz.concurrent.Task
-import mongo.DbProgram.{ DBFree, MongoAlgebra }
+import mongo.MongoProgram.{ DBFree, MongoAlgebra }
 
 trait Interpreter {
 

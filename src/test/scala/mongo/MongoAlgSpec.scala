@@ -3,8 +3,8 @@ package mongo
 import com.mongodb.{ BasicDBObject, DBObject }
 import de.bwaldvogel.mongo.MongoServer
 import de.bwaldvogel.mongo.backend.memory.MemoryBackend
-import mongo.DbProgram._
-import mongo2.InteractionAlgebra
+import mongo.MongoProgram._
+import mongo2.RWInstruction
 import org.specs2.mutable.Specification
 
 import scalaz.{ -\/, \/- }
@@ -42,7 +42,6 @@ class MongoAlgSpec extends Specification {
           } yield rs)
 
         val task: Task[DBObject] = program.runM(db.effect)
-
         val result = task.attemptRun match {
           case \/-(obj)   ⇒ true
           case -\/(error) ⇒ println(error); false
@@ -77,10 +76,30 @@ class MongoAlgSpec extends Specification {
   }
 
   "mongo2.Program" should {
-    "execute" in {
+    "execute with natural transformation" in {
       val server = new MongoServer(new MemoryBackend())
-      val db = mongo2.Program[InteractionAlgebra](collection, server.bind())
-      val data = new BasicDBObject().append("catId", 99).append("name", "Gardening Tools")
+      val db = mongo2.Program[RWInstruction](collection, server.bind())
+      val data = new BasicDBObject().append("catId", 299).append("name", "Gardening Tools")
+      val program = (for {
+        id ← db.insert(data)
+        rs ← db.findOne(query(id.get("catId").asInstanceOf[Int]))
+      } yield rs)
+
+      val task: Task[DBObject] = program.foldMap(db.transformation)
+      val r = task.attemptRun match {
+        case \/-(obj)   ⇒ true
+        case -\/(error) ⇒ println(error); false
+      }
+      server.shutdownNow
+      r should beTrue
+    }
+  }
+
+  "mongo2.Program" should {
+    "execute with effect" in {
+      val server = new MongoServer(new MemoryBackend())
+      val db = mongo2.Program[RWInstruction](collection, server.bind())
+      val data = new BasicDBObject().append("catId", 399).append("name", "Gardening Tools")
       val program = (for {
         id ← db.insert(data)
         rs ← db.findOne(query(id.get("catId").asInstanceOf[Int]))
@@ -89,9 +108,10 @@ class MongoAlgSpec extends Specification {
       val task: Task[DBObject] = program.runM(db.effect)
       val r = task.attemptRun match {
         case \/-(obj)   ⇒ true
-        case -\/(error) ⇒ false
+        case -\/(error) ⇒ println(error); false
       }
 
+      server.shutdownNow
       r should beTrue
     }
   }
