@@ -155,7 +155,29 @@ package object catamorphism {
         else ifSome(opt.asInstanceOf[A])
       }
     }
+  }
 
+  trait Java8Option extends OptionSig {
+    type Option[+A] = java.util.Optional[_ <: A]
+    type Some[+A]   = java.util.Optional[_ <: A]
+    type None       = java.util.Optional[Nothing]
+
+  }
+
+  object Java8Option {
+    implicit object ops extends OptionOps[Java8Option] {
+
+      def some[A](x: A): Java8Option#Some[A] = java.util.Optional.of(x)
+
+      val none: Java8Option#None = java.util.Optional.empty()
+
+      def fold[A, B](opt: Java8Option#Option[A])(ifNone: => B, ifSome: A => B): B = {
+        import java.util.function.{ Function => F, Supplier }
+        def f = new F[A, B] { def apply(a: A): B = ifSome(a) }
+        def supplier = new Supplier[B] { def get(): B = ifNone }
+        opt.map[B](f).orElseGet(supplier)
+      }
+    }
   }
 
   class Program[T <: OptionSig: OptionOps](implicit tag: ClassTag[T]) {
