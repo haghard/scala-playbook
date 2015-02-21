@@ -1,48 +1,63 @@
 import java.net.InetSocketAddress
 
 import mongo2.Program.DBInterpreter
-import com.mongodb.{ ServerAddress, MongoClient, WriteConcern }
+import com.mongodb._
+import org.apache.log4j.Logger
+import scala.reflect.ClassTag
 import scala.util.{ Failure, Success, Try }
 import scalaz._
 import scalaz.concurrent.Task
+import scalaz.Free.liftF
 import scala.language.higherKinds
-import com.mongodb.{ DBObject, DBCollection }
 
 package object mongo2 {
 
-  sealed trait RWInstruction[A]
-  case class FindOne[A](coll: DBCollection, query: DBObject, next: DBObject ⇒ A) extends RWInstruction[A]
-  case class Insert[A](coll: DBCollection, obj: DBObject, next: DBObject ⇒ A) extends RWInstruction[A]
+  sealed trait MongoIO[+A]
+  case class FindOne[A](coll: DBCollection, query: DBObject, next: DBObject ⇒ A) extends MongoIO[A]
+  case class Insert[A](coll: DBCollection, obj: DBObject, next: DBObject ⇒ A) extends MongoIO[A]
 
-  implicit val functor: Functor[RWInstruction] = new Functor[RWInstruction] {
-    def map[A, B](fa: RWInstruction[A])(f: A ⇒ B) =
+  implicit val functor: Functor[MongoIO] = new Functor[MongoIO] {
+    def map[A, B](fa: MongoIO[A])(f: A ⇒ B) =
       fa match {
         case FindOne(c, q, next) ⇒ FindOne(c, q, next andThen f)
         case Insert(c, q, next)  ⇒ Insert(c, q, next andThen f)
       }
   }
 
-  sealed trait LifecycleInstruction[A]
-  case class Connect[A](next: Status ⇒ A) extends LifecycleInstruction[A]
-  case class Disconnect[A](next: Status ⇒ A) extends LifecycleInstruction[A]
+  implicit val functorF: Functor[FindOne] = new Functor[FindOne] {
+    override def map[A, B](fa: FindOne[A])(f: (A) ⇒ B): FindOne[B] =
+      FindOne(fa.coll, fa.query, x ⇒ f(fa.next(x)))
+  }
+
+  implicit val functorI: Functor[Insert] = new Functor[Insert] {
+    override def map[A, B](fa: Insert[A])(f: (A) ⇒ B): Insert[B] =
+      Insert(fa.coll, fa.obj, x ⇒ f(fa.next(x)))
+  }
+
+  sealed trait Lifecycle[A]
+  case class Connect[A](next: Status ⇒ A) extends Lifecycle[A]
+  case class Disconnect[A](next: Status ⇒ A) extends Lifecycle[A]
 
   sealed abstract class Status
   case object Ok extends Status
   case object Error extends Status
 
   object Program {
+
     sealed abstract class DBInterpreter[F[_]] {
       def effect[T](action: F[Free[F, T]]): Task[Free[F, T]]
       def transformation: F ~> Task
+      def toInstructions[T](exp: Free[F, T]): List[String]
     }
 
-    implicit val cycle = new DBInterpreter[LifecycleInstruction] {
-      override def effect[T](action: LifecycleInstruction[Free[LifecycleInstruction, T]]): Task[Free[LifecycleInstruction, T]] = ???
-      override def transformation: ~>[LifecycleInstruction, Task] = ???
+    implicit def cycle = new DBInterpreter[Lifecycle] {
+      override def effect[T](action: Lifecycle[Free[Lifecycle, T]]): Task[Free[Lifecycle, T]] = ???
+      override def transformation: ~>[Lifecycle, Task] = ???
+      override def toInstructions[T](exp: Free[Lifecycle, T]): List[String] = ???
     }
 
-    implicit val ReadWrite = new DBInterpreter[RWInstruction] {
-      private def transform[T](op: RWInstruction[T]): Task[T] =
+    implicit def io = new DBInterpreter[MongoIO] {
+      private def transform[T](op: MongoIO[T]): Task[T] =
         op match {
           case FindOne(c, query, next) ⇒
             Task {
@@ -61,30 +76,54 @@ package object mongo2 {
 
         }
 
-      override def effect[T](action: RWInstruction[Free[RWInstruction, T]]): Task[Free[RWInstruction, T]] =
-        transform(action)
+      override def effect[T](action: MongoIO[Free[MongoIO, T]]): Task[Free[MongoIO, T]] = transform(action)
 
-      override def transformation: RWInstruction ~> Task = new (RWInstruction ~> Task) {
-        def apply[T](op: RWInstruction[T]) = transform(op)
+      override def transformation: MongoIO ~> Task = new (MongoIO ~> Task) {
+        def apply[T](op: MongoIO[T]) = transform(op)
+      }
+
+      override def toInstructions[T](exp: Free[MongoIO, T]): List[String] = {
+        def loop(exp: Free[MongoIO, T], actions: List[String] = Nil): List[String] =
+          exp.resume.fold(
+            {
+              case FindOne(c, query, next) ⇒ loop(next(query), query.toString :: actions)
+              case Insert(c, obj, next)    ⇒ loop(next(obj), obj.toString :: actions)
+
+            }, { r: T ⇒ actions.reverse })
+
+        loop(exp)
       }
     }
 
-    def apply[F[_]](dbName: String, address: InetSocketAddress)(implicit delegate: DBInterpreter[F]) =
-      new Program(dbName, address, delegate)
+    def apply[F[_]: Functor](dbName: String, address: InetSocketAddress)(implicit tag: ClassTag[F[_]], delegate: DBInterpreter[F]) =
+      new Program[F](dbName, address, delegate, tag.runtimeClass.getCanonicalName)
   }
 
-  final class Program[F[_]] private (dbName: String, address: InetSocketAddress, delegate: DBInterpreter[F]) {
-    import scalaz.Free.liftF
-    private val client = new MongoClient(new ServerAddress(address))
+  class Program[F[_]] private (dbName: String, address: InetSocketAddress, delegate: DBInterpreter[F], alg: String) {
+    private val logger = Logger.getLogger(alg)
+    private lazy val client = new MongoClient(new ServerAddress(address))
 
-    def findOne(query: DBObject)(implicit collection: String): Free[RWInstruction, DBObject] =
-      liftF(FindOne(client.getDB(dbName).getCollection(collection), query, identity))
+    type DBFree[T] = Free[F, T]
 
-    def insert(query: DBObject)(implicit collection: String): Free[RWInstruction, DBObject] =
-      liftF(Insert(client.getDB(dbName).getCollection(collection), query, identity))
+    def findOne(query: DBObject)(implicit collection: String): DBFree[DBObject] =
+      liftF(FindOne(client.getDB(dbName).getCollection(collection), query, identity)).asInstanceOf[DBFree[DBObject]]
 
-    def effect[T](action: F[Free[F, T]]): Task[Free[F, T]] = delegate.effect(action)
+    def insert(query: DBObject)(implicit collection: String): DBFree[DBObject] =
+      liftF(Insert(client.getDB(dbName).getCollection(collection), query, identity)).asInstanceOf[DBFree[DBObject]]
 
-    def transformation: F ~> Task = delegate.transformation
+    def effect[T](action: F[Free[F, T]]): Task[Free[F, T]] = {
+      logger.info(s"Execute Program[$alg]")
+      delegate.effect(action)
+    }
+
+    def transformation: F ~> Task = {
+      logger.info(s"Execute Program[$alg]")
+      delegate.transformation
+    }
+
+    def instructions[T](exp: Free[F, T]): List[String] = {
+      logger.info(s"Program[$alg] split on instructions")
+      delegate.toInstructions(exp)
+    }
   }
 }
