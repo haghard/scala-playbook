@@ -99,7 +99,7 @@ package object mongo2 {
       new Program[F](dbName, address, delegate, tag.runtimeClass.getCanonicalName)
   }
 
-  class Program[F[_]] private (dbName: String, address: InetSocketAddress, delegate: DBInterpreter[F], alg: String) {
+  final class Program[F[_]] private (dbName: String, address: InetSocketAddress, delegate: DBInterpreter[F], alg: String) {
     private val logger = Logger.getLogger(alg)
     private lazy val client = new MongoClient(new ServerAddress(address))
 
@@ -112,12 +112,12 @@ package object mongo2 {
       liftF(Insert(client.getDB(dbName).getCollection(collection), query, identity)).asInstanceOf[DBFree[DBObject]]
 
     def effect[T](action: F[Free[F, T]]): Task[Free[F, T]] = {
-      logger.info(s"Execute Program[$alg]")
+      logger.info(s"Program[$alg] executed through effect")
       delegate.effect(action)
     }
 
     def transformation: F ~> Task = {
-      logger.info(s"Execute Program[$alg]")
+      logger.info(s"Program[$alg] executed through transformation")
       delegate.transformation
     }
 
