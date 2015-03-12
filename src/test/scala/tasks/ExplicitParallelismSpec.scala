@@ -50,16 +50,16 @@ class ExplicitParallelismSpec extends Specification {
     }
   }
 
-  "Run fact" should {
+  "Run factorial" should {
     "run single thread" in {
       object Big { def unapply(n: BigInt) = Some(n.toInt) }
 
-      def fact(n: BigInt): Task[BigInt] = n match {
+      def factorial(n: BigInt): Task[BigInt] = n match {
         case Big(1) ⇒ Task now 1
-        case n      ⇒ for { r ← fact(n - 1) } yield { n * r }
+        case n      ⇒ for { r ← factorial(n - 1) } yield { n * r }
       }
 
-      fact(30).attemptRun should be equalTo \/-(BigInt("265252859812191058636308480000000"))
+      factorial(30).attemptRun should be equalTo \/-(BigInt("265252859812191058636308480000000"))
     }
   }
 

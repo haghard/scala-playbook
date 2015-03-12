@@ -27,13 +27,8 @@ package object akkaScalazStreams {
   }
 
   implicit class ActorRefOps(val self: ActorRef) extends AnyVal {
-    def askChannel[A, B](implicit timeout: Timeout, tag: ClassTag[B]): Channel[Task, A, B] = {
-      io.channel[Task, A, B] { message: A ⇒
-        Task suspend {
-          (self ask message).mapTo[B] toTask
-        }
-      }
-    }
+    def askChannel[A, B](implicit timeout: Timeout, tag: ClassTag[B]): Channel[Task, A, B] =
+      askActor[A, B](self)
   }
 
   def askActor[A, B](actor: ActorRef)(implicit timeout: Timeout, tag: ClassTag[B]): Channel[Task, A, B] = {
