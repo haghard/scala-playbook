@@ -19,7 +19,9 @@ name := "scala-playbook"
 
 version := "0.0.1-SNAPSHOT"
 
-scalaVersion := "2.11.5"
+scalaVersion := "2.11.6"
+
+val Akka = "2.3.9"
 
 parallelExecution in Test := false
 
@@ -32,12 +34,15 @@ libraryDependencies ++= Seq(
     "org.scalaz"          %% "scalaz-concurrent"   %  "7.1.0"   withSources(),
     "org.mongodb"         %  "mongo-java-driver"   %  "2.13.0"  withSources(),
     "org.scalaz.stream"   %% "scalaz-stream"       %  "0.6a"    withSources(),
+    "com.typesafe.akka"   %% "akka-actor"          %  Akka      withSources(),
+    "com.typesafe.akka"   %% "akka-testkit"        %  Akka,
     "log4j"               %  "log4j"               %  "1.2.14")
 
 
 libraryDependencies ++= Seq(
   "de.bwaldvogel"       %   "mongo-java-server"   %   "1.2.0",
-  "org.specs2"          %%  "specs2"              %   "2.4.15"  % "test"
+  "org.scalatest"       %%  "scalatest"           %   "2.2.0"   %   "test",
+  "org.specs2"          %%  "specs2"              %   "2.4.15"  %   "test"
 )
 
 

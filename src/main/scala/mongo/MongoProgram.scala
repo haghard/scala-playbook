@@ -5,7 +5,6 @@ import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicInteger
 
 import de.bwaldvogel.mongo.MongoServer
-import scala.util.{ Failure, Success, Try }
 import scalaz.Free.liftF
 import com.mongodb._
 import scalaz.concurrent.Task

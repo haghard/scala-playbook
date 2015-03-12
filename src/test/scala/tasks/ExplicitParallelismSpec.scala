@@ -15,8 +15,7 @@ class ExplicitParallelismSpec extends Specification {
 
   private val logger = Logger.getLogger("tasks")
 
-  implicit val executor = //new ForkJoinPool(3)
-    Executors.newFixedThreadPool(5, new NamedThreadFactory("ext-worker"))
+  implicit val executor = new ForkJoinPool(3)
 
   "Run fib without concurrency" should {
     "run in same thread" in {
@@ -70,9 +69,9 @@ class ExplicitParallelismSpec extends Specification {
       import scalaz.Nondeterminism
 
       val a = Task.fork { Thread.sleep(1000); Task.now("a") }
-      val b = Task.fork { Thread.sleep(1000); Task.now("b") }
-      val c = Task.fork { Thread.sleep(1000); Task.now("c") }
-      val d = Task.fork { Thread.sleep(1000); Task.now("d") }
+      val b = Task.fork { Thread.sleep(800); Task.now("b") }
+      val c = Task.fork { Thread.sleep(600); Task.now("c") }
+      val d = Task.fork { Thread.sleep(200); Task.now("d") }
 
       val r = Nondeterminism[Task].nmap4(a, b, c, d)(List(_, _, _, _))
       val list = r.run
@@ -81,34 +80,40 @@ class ExplicitParallelismSpec extends Specification {
     }
   }
 
+  import scalaz.Kleisli
+  type Delegated[A] = Kleisli[Task, ExecutorService, A]
+
+  def delegate: Delegated[ExecutorService] = Kleisli.kleisli(e ⇒ Task.now(e))
+
+  implicit class KleisliTask[A](val task: Task[A]) {
+    def kleisli: Delegated[A] = Kleisli.kleisli(_ ⇒ task)
+  }
+
   "Kleisli for pleasant choose the pool" should {
     "run" in {
-      //This is how we can then get a computation to run on precisely the pool, 
-      //without having to constantly pass around the explicit reference to the desired pool
-      import scalaz.Kleisli
-      type Delegated[A] = Kleisli[Task, ExecutorService, A]
-      implicit def delegateTaskToPool[A](a: Task[A]): Delegated[A] = Kleisli { x ⇒ a }
-      def delegate: Delegated[ExecutorService] = Kleisli { e ⇒ Task.now(e) }
+      //This is how we can get a computation to run on precisely the pool,
+      //without having to constantly pass around the explicit reference to the target pool
 
-      val executorIO = Executors.newFixedThreadPool(5, new NamedThreadFactory("io-worker"))
+      val executorIO = Executors.newFixedThreadPool(2, new NamedThreadFactory("io-worker"))
       val executorCPU = Executors.newFixedThreadPool(2, new NamedThreadFactory("cpu-worker"))
 
       val flow = for {
-        p ← delegate
+        executor ← delegate
         pair ← Nondeterminism[Task].both(
           Task {
             println(Thread.currentThread().getName + "X start")
             Thread.sleep(2000)
             println(Thread.currentThread().getName + "X stop")
             Thread.currentThread().getName + "-x"
-          }(p),
+          }(executor),
           Task {
             println(Thread.currentThread().getName + "Y start")
             Thread.sleep(1000)
             println(Thread.currentThread().getName + "Y stop")
             Thread.currentThread().getName + "-y"
-          }(p)
-        )
+          }(executor)
+        ).kleisli
+
         (x, y) = pair
       } yield { s"$x - $y" }
 
