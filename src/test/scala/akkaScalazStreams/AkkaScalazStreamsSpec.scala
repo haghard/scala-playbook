@@ -1,31 +1,13 @@
 package akkaScalazStreams
 
-import akka.actor.{ ActorLogging, ActorSystem }
+import akka.actor.ActorSystem
 import akka.testkit.{ ImplicitSender, TestKit }
-import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.MustMatchers
 import org.scalatest.WordSpecLike
 
 import scalaz.concurrent.Task
-
-object AkkaScalazStreamsSpec {
-  def config = ConfigFactory.parseString(s"""
-    akka {
-      test-dispatcher {
-        type = Dispatcher
-        executor = "fork-join-executor"
-        fork-join-executor {
-          parallelism-min = 4
-          parallelism-factor = 2.0
-          parallelism-max = 20
-        }
-        throughput = 100
-      }
-    }
-  """)
-}
 
 class AkkaScalazStreamsSpec extends TestKit(ActorSystem("Integration"))
     with WordSpecLike with MustMatchers
@@ -58,10 +40,8 @@ class AkkaScalazStreamsSpec extends TestKit(ActorSystem("Integration"))
         become {
           case x: Int ⇒
             messages = x :: messages
-            val r = Integer.toHexString(x.hashCode())
-            sender() ! r
-          case 'Entry ⇒
-            sender() ! messages.reverse
+            sender() ! Integer.toHexString(x.hashCode())
+          case 'Entry ⇒ sender() ! messages.reverse
         }
       })
 
