@@ -136,21 +136,30 @@ package object mongo2 {
     def insert(query: DBObject)(implicit collection: String): DBFree[DBObject] =
       liftF(Insert(client.getDB(dbName).getCollection(collection), query, identity)).asInstanceOf[DBFree[DBObject]]
 
-    def effect[T](action: F[Free[F, T]]): Task[Free[F, T]] = {
-      logger.info(s"Program[$alg] executed through effect")
-      delegate.effect(action)
-    }
+    /**
+     *
+     *
+     * @return
+     */
+    def effect[T](action: F[Free[F, T]]): Task[Free[F, T]] = delegate.effect(action)
 
-    def toTask: F ~> Task = {
-      logger.info(s"Program[$alg] executed through Task transformation")
-      delegate.toTask
-    }
+    /**
+     *
+     * @return
+     */
+    def toTask: F ~> Task = delegate.toTask
 
-    def toIO: F ~> IO = {
-      logger.info(s"Program[$alg] executed through IO transformation")
-      delegate.toIO
-    }
+    /**
+     *
+     * @return
+     */
+    def toIO: F ~> IO = delegate.toIO
 
+    /**
+     *
+     *
+     * @return
+     */
     def instructions[T](exp: Free[F, T]): List[String] = {
       logger.info(s"Program[$alg] split on instructions")
       delegate.toInstructions(exp)

@@ -1,4 +1,4 @@
-package catamorphism
+package modules
 
 import org.specs2.mutable.Specification
 

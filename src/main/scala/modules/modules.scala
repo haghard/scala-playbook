@@ -15,7 +15,7 @@ import scala.reflect.ClassTag
  * b) finding concrete dependency by DI framework
  *
  */
-package object catamorphism {
+package object modules {
   import scala.language.higherKinds
 
   /**

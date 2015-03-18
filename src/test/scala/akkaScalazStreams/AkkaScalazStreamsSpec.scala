@@ -1,11 +1,11 @@
 package akkaScalazStreams
 
 import akka.actor.ActorSystem
-import akka.testkit.{ ImplicitSender, TestKit }
-import org.scalatest.BeforeAndAfterAll
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.MustMatchers
 import org.scalatest.WordSpecLike
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.BeforeAndAfterEach
+import akka.testkit.{ ImplicitSender, TestKit }
 
 import scalaz.concurrent.Task
 
