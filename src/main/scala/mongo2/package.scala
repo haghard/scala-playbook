@@ -9,6 +9,7 @@ import scalaz._
 import scalaz.concurrent.Task
 import scalaz.Free.liftF
 import scala.language.higherKinds
+import scalaz.effect.IO
 
 package object mongo2 {
 
@@ -46,17 +47,19 @@ package object mongo2 {
 
     sealed abstract class DBInterpreter[F[_]] {
       def effect[T](action: F[Free[F, T]]): Task[Free[F, T]]
-      def transformation: F ~> Task
+      def toTask: F ~> Task
+      def toIO: F ~> IO
       def toInstructions[T](exp: Free[F, T]): List[String]
     }
 
     implicit def cycle = new DBInterpreter[Lifecycle] {
       override def effect[T](action: Lifecycle[Free[Lifecycle, T]]): Task[Free[Lifecycle, T]] = ???
-      override def transformation: ~>[Lifecycle, Task] = ???
+      override def toTask: ~>[Lifecycle, Task] = ???
       override def toInstructions[T](exp: Free[Lifecycle, T]): List[String] = ???
+      override def toIO: ~>[Lifecycle, IO] = ???
     }
 
-    implicit def io = new DBInterpreter[MongoIO] {
+    implicit def default = new DBInterpreter[MongoIO] {
       private def transform[T](op: MongoIO[T]): Task[T] =
         op match {
           case FindOne(c, query, next) ⇒
@@ -76,10 +79,32 @@ package object mongo2 {
 
         }
 
-      override def effect[T](action: MongoIO[Free[MongoIO, T]]): Task[Free[MongoIO, T]] = transform(action)
+      override def effect[T](action: MongoIO[Free[MongoIO, T]]): Task[Free[MongoIO, T]] =
+        transform(action)
 
-      override def transformation: MongoIO ~> Task = new (MongoIO ~> Task) {
+      override def toTask: MongoIO ~> Task = new (MongoIO ~> Task) {
         def apply[T](op: MongoIO[T]) = transform(op)
+      }
+
+      override def toIO: MongoIO ~> IO = new (MongoIO ~> IO) {
+        def apply[T](op: MongoIO[T]) = op match {
+          case FindOne(c, query, next) ⇒ IO {
+            val r = c.findOne(query)
+            if (r eq null) {
+              throw new Exception(s"Can't findOne in $c by $query")
+            }
+            r
+          }.map(next)
+          case Insert(c, obj, next) ⇒ IO {
+            Try {
+              c.insert(WriteConcern.ACKNOWLEDGED, obj)
+              obj
+            } match {
+              case Success(obj)   ⇒ obj
+              case Failure(error) ⇒ throw new Exception(s"Can't Insert in $c - $obj", error)
+            }
+          }.map(next)
+        }
       }
 
       override def toInstructions[T](exp: Free[MongoIO, T]): List[String] = {
@@ -116,9 +141,14 @@ package object mongo2 {
       delegate.effect(action)
     }
 
-    def transformation: F ~> Task = {
-      logger.info(s"Program[$alg] executed through transformation")
-      delegate.transformation
+    def toTask: F ~> Task = {
+      logger.info(s"Program[$alg] executed through Task transformation")
+      delegate.toTask
+    }
+
+    def toIO: F ~> IO = {
+      logger.info(s"Program[$alg] executed through IO transformation")
+      delegate.toIO
     }
 
     def instructions[T](exp: Free[F, T]): List[String] = {

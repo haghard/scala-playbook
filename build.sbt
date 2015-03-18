@@ -25,9 +25,13 @@ val Akka = "2.3.9"
 
 parallelExecution in Test := false
 
+net.virtualvoid.sbt.graph.Plugin.graphSettings
+
 resolvers += "Sonatype snapshots" at "http://oss.sonatype.org/content/repositories/snapshots/"
 
 resolvers += "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases"
+
+resolvers += "haghard-bintray"    at "http://dl.bintray.com/haghard/releases"
 
 libraryDependencies ++= Seq(
     "org.scalaz"          %% "scalaz-core"         %  "7.1.0"   withSources(),
@@ -36,6 +40,7 @@ libraryDependencies ++= Seq(
     "org.scalaz.stream"   %% "scalaz-stream"       %  "0.6a"    withSources(),
     "com.typesafe.akka"   %% "akka-actor"          %  Akka      withSources(),
     "com.typesafe.akka"   %% "akka-testkit"        %  Akka,
+    "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5" exclude ("org.specs2", "*"),
     "log4j"               %  "log4j"               %  "1.2.14")
 
 

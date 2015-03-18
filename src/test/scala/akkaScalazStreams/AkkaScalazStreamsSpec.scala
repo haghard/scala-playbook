@@ -19,14 +19,14 @@ class AkkaScalazStreamsSpec extends TestKit(ActorSystem("Integration"))
   import scalaz.stream.Process
   import scala.concurrent.duration._
 
+  implicit val to = akka.util.Timeout(1 seconds)
+
   override def afterAll() {
     TestKit.shutdownActorSystem(system)
   }
 
-  implicit val to = akka.util.Timeout(1 seconds)
-
-  "Ask akka actor" must {
-    "integration with scalaz-streams" in {
+  "Scalaz-Streams api integration with akka actors" must {
+    "with ask" in {
       val P = Process
       val range = 0 until 10
 

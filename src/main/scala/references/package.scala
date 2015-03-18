@@ -1,7 +1,7 @@
 package object references {
 
   /**
-   * We want our code to not compile if it violates these invariants:
+   * We want our code don't compile if it violates these invariants:
    *
    *  If we hold a reference to a mutable object, then nothing can observe as mutating it.
    *  A mutable object can never be observed outside of the scope in which it was created.
