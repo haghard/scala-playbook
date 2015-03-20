@@ -2,6 +2,8 @@ package visitor
 
 import org.specs2.mutable.Specification
 
+import scalaz.Kleisli
+
 class VisitorSpec extends Specification {
 
   "Patternmatching visitor" should {
@@ -45,7 +47,6 @@ class VisitorSpec extends Specification {
   "Visitor Pattern State" should {
     "eval" in {
       import VisitorPatternState._
-
       val expr = new Sum(new Num(1), new Prod(new Num(2), new Num(3)))
       VisitorPatternState.eval(expr) should be equalTo 7
     }

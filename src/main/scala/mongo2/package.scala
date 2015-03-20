@@ -1,5 +1,4 @@
 import java.net.InetSocketAddress
-
 import mongo2.Program.DBInterpreter
 import com.mongodb._
 import org.apache.log4j.Logger
@@ -128,13 +127,13 @@ package object mongo2 {
     private val logger = Logger.getLogger(alg)
     private lazy val client = new MongoClient(new ServerAddress(address))
 
-    type DBFree[T] = Free[F, T]
+    type DBAction[T] = Free[F, T]
 
-    def findOne(query: DBObject)(implicit collection: String): DBFree[DBObject] =
-      liftF(FindOne(client.getDB(dbName).getCollection(collection), query, identity)).asInstanceOf[DBFree[DBObject]]
+    def findOne(query: DBObject)(implicit collection: String): DBAction[DBObject] =
+      liftF(FindOne(client.getDB(dbName).getCollection(collection), query, identity)).asInstanceOf[DBAction[DBObject]]
 
-    def insert(query: DBObject)(implicit collection: String): DBFree[DBObject] =
-      liftF(Insert(client.getDB(dbName).getCollection(collection), query, identity)).asInstanceOf[DBFree[DBObject]]
+    def insert(query: DBObject)(implicit collection: String): DBAction[DBObject] =
+      liftF(Insert(client.getDB(dbName).getCollection(collection), query, identity)).asInstanceOf[DBAction[DBObject]]
 
     /**
      *

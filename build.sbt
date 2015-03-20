@@ -22,6 +22,7 @@ version := "0.0.1-SNAPSHOT"
 scalaVersion := "2.11.6"
 
 val Akka = "2.3.9"
+val Doobie = "0.2.0"
 
 parallelExecution in Test := false
 
@@ -33,6 +34,8 @@ resolvers += "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases"
 
 resolvers += "haghard-bintray"    at "http://dl.bintray.com/haghard/releases"
 
+resolvers += "tpolecat" at "http://dl.bintray.com/tpolecat/maven"
+
 libraryDependencies ++= Seq(
     "org.scalaz"          %% "scalaz-core"         %  "7.1.0"   withSources(),
     "org.scalaz"          %% "scalaz-concurrent"   %  "7.1.0"   withSources(),
@@ -41,6 +44,8 @@ libraryDependencies ++= Seq(
     "com.typesafe.akka"   %% "akka-actor"          %  Akka      withSources(),
     "com.typesafe.akka"   %% "akka-testkit"        %  Akka,
     "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5" exclude ("org.specs2", "*"),
+    "org.tpolecat"        %% "doobie-core"         %  Doobie,
+    "org.tpolecat"        %% "doobie-contrib-h2"   %  Doobie,
     "log4j"               %  "log4j"               %  "1.2.14")
 
 
