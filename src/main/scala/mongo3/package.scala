@@ -23,9 +23,10 @@ package object mongo3 {
   implicit class MongoConnectionIOops[A](q: FreeMongoIO[A]) {
     private val logger = Logger.getLogger(classOf[ProgramOps])
 
-    def kleisli(implicit ex: ExecutorService): KleisliDelegate[A] = runFC[MongoIO, KleisliDelegate, A](q)(~>)
+    def kleisli(implicit ex: ExecutorService): KleisliDelegate[A] =
+      runFC[MongoIO, KleisliDelegate, A](q)(~~>)
 
-    def ~>(implicit ex: ExecutorService): MongoIO ~> KleisliDelegate = {
+    def ~~>(implicit ex: ExecutorService): MongoIO ~> KleisliDelegate =
       new (MongoIO ~> KleisliDelegate) {
         override def apply[T](op: MongoIO[T]): KleisliDelegate[T] = {
           op match {
@@ -62,19 +63,20 @@ package object mongo3 {
           }
         }
       }
-    }
   }
 
   trait ProgramOps {
     def dbName: String
 
-    def find(query: DBObject)(implicit collection: String): FreeMongoIO[DBObject] =
+    //FreeMongoIO[DBObject]
+
+    def find(query: DBObject)(implicit collection: String) =
       Free.liftFC[MongoIO, DBObject](Find(dbName, collection, query))
 
-    def findOne(query: DBObject)(implicit collection: String): FreeMongoIO[DBObject] =
+    def findOne(query: DBObject)(implicit collection: String) =
       Free.liftFC[MongoIO, DBObject](FindOne(dbName, collection, query))
 
-    def insert(insertObj: DBObject)(implicit collection: String): FreeMongoIO[DBObject] =
+    def insert(insertObj: DBObject)(implicit collection: String) =
       Free.liftFC[MongoIO, DBObject](Insert(dbName, collection, insertObj))
   }
 

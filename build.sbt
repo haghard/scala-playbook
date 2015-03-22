@@ -22,7 +22,7 @@ version := "0.0.1-SNAPSHOT"
 scalaVersion := "2.11.6"
 
 val Akka = "2.3.9"
-val Doobie = "0.2.0"
+val Doobie = "0.2.1"
 
 parallelExecution in Test := false
 
@@ -44,8 +44,10 @@ libraryDependencies ++= Seq(
     "com.typesafe.akka"   %% "akka-actor"          %  Akka      withSources(),
     "com.typesafe.akka"   %% "akka-testkit"        %  Akka,
     "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5" exclude ("org.specs2", "*"),
-    "org.tpolecat"        %% "doobie-core"         %  Doobie,
-    "org.tpolecat"        %% "doobie-contrib-h2"   %  Doobie,
+    "org.tpolecat"   %% "doobie-core"               % Doobie,
+    "org.tpolecat"   %% "doobie-contrib-postgresql" % Doobie,
+    "org.tpolecat"   %% "doobie-contrib-specs2"     % Doobie,
+    "org.tpolecat"   %% "doobie-contrib-h2"         % Doobie,
     "log4j"               %  "log4j"               %  "1.2.14")
 
 

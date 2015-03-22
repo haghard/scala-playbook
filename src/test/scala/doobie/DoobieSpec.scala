@@ -10,6 +10,7 @@ import doobie.imports._
 import scalaz.Scalaz._
 import scalaz._
 import scalaz.concurrent.Task
+import scalaz.effect.IO
 
 trait Env extends org.specs2.mutable.Before {
 
@@ -29,7 +30,6 @@ trait Env extends org.specs2.mutable.Before {
 }
 
 class DoobieSpec extends Specification with Mockito {
-
   "Doobie" should {
     "run the simplest program" in {
       val xa = doobie.util.transactor.DriverManagerTransactor[Task](
@@ -44,7 +44,7 @@ class DoobieSpec extends Specification with Mockito {
     }
   }
 
-  "Doobie run transactor less program" in new Env {
+  "Doobie program using existing Connection with Task effect" in new Env {
     val task: Kleisli[Task, java.sql.Connection, Int] =
       sql"SELECT count(*) FROM country"
         .query[Int]
@@ -55,6 +55,31 @@ class DoobieSpec extends Specification with Mockito {
     val con = DriverManager.getConnection("jdbc:h2:mem:test-db0;DB_CLOSE_DELAY=-1", "sa", "")
     //mock[java.sql.Connection]
     task.run(con).attemptRun should be equalTo \/-(2)
+  }
+
+  "Doobie program using existing Connection with IO effect" in new Env {
+    val task: Kleisli[IO, java.sql.Connection, Int] =
+      sql"SELECT count(*) FROM country"
+        .query[Int]
+        .unique
+        .transK[IO]
+
+    Class.forName("org.h2.Driver")
+    val con = DriverManager.getConnection("jdbc:h2:mem:test-db0;DB_CLOSE_DELAY=-1", "sa", "")
+    //mock[java.sql.Connection]
+    task.run(con).unsafePerformIO() should be equalTo 2
+  }
+
+  "Doobie program using existing DataSource" in new Env {
+    val ds: javax.sql.DataSource = null
+    val xa = DataSourceTransactor.apply[Task](ds)
+
+    val q = sql"SELECT count(*) FROM country".query[Int].unique
+
+    val p: Task[Int] = for {
+      _ ← xa.configure(ds ⇒ Task.delay( /* do something with ds */ ()))
+      a ← q.transact(xa)
+    } yield a
   }
 
   "Doobie h2 in memory db" should {
@@ -79,5 +104,22 @@ class DoobieSpec extends Specification with Mockito {
       val task0 = sql"SELECT count(*) FROM country".query[Int].unique.transact(xa)
       task0.attemptRun must_== \/-(2)
     }
+  }
+
+  "Doobie run H2Transactor uses backed JdbcConnectionPool" in new Env {
+    import doobie.imports._, scalaz._, scalaz.concurrent.Task
+    import doobie.contrib.h2.h2transactor._
+
+    case class Country(code: String, name: String, population: Int)
+    val list = List(Country("RUS", "Russia", 146270), Country("USA", "United States of America", 320480))
+
+    val q = sql"SELECT * FROM country".query[Country].list
+
+    //The connnection pool has internal state so constructing one is an effect
+    (for {
+      xa ← H2Transactor[Task]("jdbc:h2:mem:test-db0;DB_CLOSE_DELAY=-1", "sa", "")
+      _ ← xa.setMaxConnections(5)
+      a ← q.transact(xa).ensuring(xa.dispose)
+    } yield a).attemptRun should be equalTo \/-(list)
   }
 }
