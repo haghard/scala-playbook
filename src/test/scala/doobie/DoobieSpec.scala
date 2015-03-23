@@ -77,13 +77,13 @@ class DoobieSpec extends Specification with Mockito {
     val q = sql"SELECT count(*) FROM country".query[Int].unique
 
     val p: Task[Int] = for {
-      _ ← xa.configure(ds ⇒ Task.delay( /* do something with ds */ ()))
+      _ ← xa.configure(ds ⇒ Task.delay(/* do something with ds */()))
       a ← q.transact(xa)
     } yield a
   }
 
-  "Doobie h2 in memory db" should {
-    "create_insert_read" in {
+  "Doobie h2 in memory db quering" should {
+    "quering" in {
       //:~/test
       //mem:test-db
 
@@ -106,12 +106,26 @@ class DoobieSpec extends Specification with Mockito {
     }
   }
 
+  case class Country(code: String, name: String, population: Int)
+  val list = List(Country("RUS", "Russia", 146270), Country("USA", "United States of America", 320480))
+
+  "Doobie h2 in memory db streaming throght process" in new Env {
+    val xa = doobie.util.transactor.DriverManagerTransactor[Task](
+      "org.h2.Driver",
+      "jdbc:h2:mem:test-db;DB_CLOSE_DELAY=-1",
+      "sa", "")
+
+    val p = sql"SELECT * FROM country"
+      .query[Country]
+      .process
+      .transact(xa)
+
+    p.runLog.run should be equalTo list.toIndexedSeq
+  }
+
   "Doobie run H2Transactor uses backed JdbcConnectionPool" in new Env {
     import doobie.imports._, scalaz._, scalaz.concurrent.Task
     import doobie.contrib.h2.h2transactor._
-
-    case class Country(code: String, name: String, population: Int)
-    val list = List(Country("RUS", "Russia", 146270), Country("USA", "United States of America", 320480))
 
     val q = sql"SELECT * FROM country".query[Country].list
 
