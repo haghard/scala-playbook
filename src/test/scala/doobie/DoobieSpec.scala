@@ -77,7 +77,7 @@ class DoobieSpec extends Specification with Mockito {
     val q = sql"SELECT count(*) FROM country".query[Int].unique
 
     val p: Task[Int] = for {
-      _ ← xa.configure(ds ⇒ Task.delay(/* do something with ds */()))
+      _ ← xa.configure(ds ⇒ Task.delay( /* do something with ds */ ()))
       a ← q.transact(xa)
     } yield a
   }
@@ -109,7 +109,7 @@ class DoobieSpec extends Specification with Mockito {
   case class Country(code: String, name: String, population: Int)
   val list = List(Country("RUS", "Russia", 146270), Country("USA", "United States of America", 320480))
 
-  "Doobie h2 in memory db streaming throght process" in new Env {
+  "Doobie h2 in memory db streaming thought process" in new Env {
     val xa = doobie.util.transactor.DriverManagerTransactor[Task](
       "org.h2.Driver",
       "jdbc:h2:mem:test-db;DB_CLOSE_DELAY=-1",
