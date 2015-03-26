@@ -32,7 +32,7 @@ package object akkaScalazStreams {
   }
 
   def askActor[A, B](actor: ActorRef)(implicit timeout: Timeout, tag: ClassTag[B]): Channel[Task, A, B] = {
-    io.channel[Task, A, B] { message: A ⇒
+    channel.lift[Task, A, B] { message: A ⇒
       Task suspend { (actor ask message).mapTo[B] toTask }
     }
   }

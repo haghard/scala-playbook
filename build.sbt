@@ -40,14 +40,16 @@ libraryDependencies ++= Seq(
     "org.scalaz"          %% "scalaz-core"         %  "7.1.0"   withSources(),
     "org.scalaz"          %% "scalaz-concurrent"   %  "7.1.0"   withSources(),
     "org.mongodb"         %  "mongo-java-driver"   %  "2.13.0"  withSources(),
-    "org.scalaz.stream"   %% "scalaz-stream"       %  "0.6a"    withSources(),
+    "org.scalaz.stream"   %% "scalaz-stream"       %  "0.7a"    withSources(),
     "com.typesafe.akka"   %% "akka-actor"          %  Akka      withSources(),
     "com.typesafe.akka"   %% "akka-testkit"        %  Akka,
-    "org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5" exclude ("org.specs2", "*"),
+    //"org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5.1" exclude ("org.specs2", "*"),
+    //"net.fehmicansaglam"  %% "tepkin"              %  "0.2-SNAPSHOT",
     "org.tpolecat"   %% "doobie-core"               % Doobie,
     "org.tpolecat"   %% "doobie-contrib-postgresql" % Doobie,
     "org.tpolecat"   %% "doobie-contrib-specs2"     % Doobie,
     "org.tpolecat"   %% "doobie-contrib-h2"         % Doobie,
+    "org.scodec"     %% "scodec-bits"               % "1.0.6",
     "log4j"               %  "log4j"               %  "1.2.14")
 
 

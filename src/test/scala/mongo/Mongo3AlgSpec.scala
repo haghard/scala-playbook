@@ -2,6 +2,7 @@ package mongo
 
 import java.util.concurrent.Executors
 import de.bwaldvogel.mongo.MongoServer
+import mongo.MongoProgram.NamedThreadFactory
 import org.specs2.mutable.Specification
 import de.bwaldvogel.mongo.backend.memory.MemoryBackend
 import com.mongodb.{ ServerAddress, MongoClient, DBObject, BasicDBObject }
