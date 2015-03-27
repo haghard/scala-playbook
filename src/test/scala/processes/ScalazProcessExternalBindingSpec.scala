@@ -11,7 +11,7 @@ import scalaz.stream._
 import scalaz.concurrent.{ Strategy, Task }
 
 class ScalazProcessExternalBindingSpec extends Specification {
-  private val logger = Logger.getLogger("processes")
+  private val logger = Logger.getLogger("proc-binding")
 
   val P = scalaz.stream.Process
 
