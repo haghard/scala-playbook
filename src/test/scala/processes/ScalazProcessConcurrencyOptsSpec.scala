@@ -63,7 +63,7 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
     "Merges non-deterministically processes with mergeN" in {
       val ioPool = newFixedThreadPool(4, new NamedThreadFactory("io-worker"))
 
-      val pool = newFixedThreadPool(1, new NamedThreadFactory("Gatter"))
+      val pool = newFixedThreadPool(1, new NamedThreadFactory("Gather"))
       val consumerStrategy = Strategy.Executor(pool)
 
       val range = 0 until 50
