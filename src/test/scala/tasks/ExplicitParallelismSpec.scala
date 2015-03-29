@@ -1,7 +1,6 @@
 package tasks
 
-import java.util.concurrent.{ ExecutorService, Executors }
-
+import java.util.concurrent.Executors
 import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
@@ -80,17 +79,9 @@ class ExplicitParallelismSpec extends Specification {
     }
   }
 
-  import scalaz.Kleisli
-  type Delegated[A] = Kleisli[Task, ExecutorService, A]
-
-  def delegate: Delegated[ExecutorService] = Kleisli.kleisli(e ⇒ Task.now(e))
-
-  implicit class KleisliTask[A](val task: Task[A]) {
-    def kleisli: Delegated[A] = Kleisli.kleisli(_ ⇒ task)
-  }
-
   "Kleisli for pleasant choose the pool" should {
     "run" in {
+      import common.KleisliSupport._
       //This is how we can get a computation to run on precisely the pool,
       //without having to constantly pass around the explicit reference to the target pool
 
@@ -123,8 +114,8 @@ class ExplicitParallelismSpec extends Specification {
       val r0 = new SyncVar[Throwable \/ String]
       val r1 = new SyncVar[Throwable \/ String]
 
-      result0.runAsync(r0.put(_))
-      result1.runAsync(r1.put(_))
+      result0.runAsync(r0.put)
+      result1.runAsync(r1.put)
 
       r0.get should be equalTo \/-("io-worker-thread-1-x - io-worker-thread-2-y")
       r1.get should be equalTo \/-("cpu-worker-thread-1-x - cpu-worker-thread-2-y")
