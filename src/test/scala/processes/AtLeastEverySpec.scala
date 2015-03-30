@@ -7,7 +7,6 @@ import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
 
-import scala.concurrent.SyncVar
 import scala.concurrent.duration.Duration
 import scala.concurrent.forkjoin.{ ForkJoinPool, ThreadLocalRandom }
 import scalaz.concurrent.Task
@@ -19,61 +18,63 @@ class AtLeastEverySpec extends Specification {
 
   val P = scalaz.stream.Process
 
-  implicit val executor = new ForkJoinPool(2)
+  val executor = new ForkJoinPool(2)
   implicit val ex = newScheduledThreadPool(1, new NamedThreadFactory("Schedulers"))
 
   "Process atLeastEvery" should {
-    "will survive the timeout" in {
-
+    "if we exceed latency for whole provess we will throw TimeoutException/emit default" in {
+      val n = 15
       def atLeastEvery[A](rate: Process[Task, Duration], default: A)(p: Process[Task, A]): Process[Task, A] = {
         for {
           w ← rate either p
-          res ← w.fold({ d ⇒ P.emit(default) }, { v: A ⇒ P.emit(v) })
-        } yield (res)
+          r ← w.fold({ d ⇒ /*P.emit(default)*/ P.fail(new TimeoutException(default.toString)) }, { v: A ⇒ P.emit(v) })
+        } yield r
       }
 
-      val io = for {
-        p ← P.emitAll(0 until 10)
+      val io = (for {
+        p ← P.emitAll(1 until n)
         i ← P.eval(Task {
-          val l = ThreadLocalRandom.current().nextInt(1, 4) * 1000
+          val l = ThreadLocalRandom.current().nextInt(1, 4) * 100
+          logger.info("№" + p + " - generated latency: " + l)
           Thread.sleep(l)
           s"$p - $l"
         }(executor))
-      } yield i
+      } yield i)
 
-      val p = atLeastEvery(time.awakeEvery(2200 milli), "Timeout 2200 mills")(io)
-      p.take(10)
+      val p = atLeastEvery(time.awakeEvery(2000 milli), "Timeout the whole process in  3000 mills")(io)
+      p.take(n)
         .map { r ⇒ logger.info("result - " + r); r }
         .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); P.halt }
         .onComplete { P.eval(Task.delay(logger.debug(s"Process has been completed"))) }
         .run.run
-
       true should be equalTo true
     }
   }
 
   "Process atLeastEvery" should {
-    "will throw TimeoutException once we break latency limit" in {
-
+    "if we exceed latency we will throw TimeoutException/emit default" in {
+      val n = 10
       def atLeastEvery[A](rate: Process[Task, Duration], default: A)(p: Process[Task, A]): Process[Task, A] =
         for {
           w ← (rate either p) |> process1.sliding(2)
-          r ← if (w.forall(_.isLeft)) P.fail(new TimeoutException(default.toString))
+          r ← if (w.forall(_.isLeft)) P.emit(default) //P.fail(new TimeoutException(default.toString))
           else P.emitAll(w.headOption.toSeq.filter(_.isRight).map(_.getOrElse(default)))
+          l = logger.info(w)
         } yield (r)
 
       val io = for {
-        p ← P.emitAll(0 until 10)
+        p ← P.emitAll(1 until n)
         i ← P.eval(Task {
           val l = ThreadLocalRandom.current().nextInt(1, 4) * 1000
+          logger.info("№" + p + " - generated latency: " + l)
           Thread.sleep(l)
           s"$p - $l"
         }(executor))
       } yield i
 
-      val p = atLeastEvery(time.awakeEvery(2200 milli), "Timeout fail")(io)
-      p.take(10)
-        .map { r ⇒ logger.info("In time task latency: " + r); r }
+      val p = atLeastEvery(time.awakeEvery(2200 milli), "Task timeout !!!")(io)
+      p.take(n)
+        .map { r ⇒ logger.info("result - " + r); r }
         .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); P.halt }
         .onComplete { P.eval(Task.delay(logger.debug(s"Process has been completed"))) }
         .run.run /*Async(_ ⇒ s.put(true))*/

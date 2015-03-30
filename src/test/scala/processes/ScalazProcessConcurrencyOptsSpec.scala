@@ -1,17 +1,13 @@
 package processes
 
-import java.util.concurrent.{ ExecutorService, TimeUnit, Executors }
 import java.util.concurrent.Executors._
-
 import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
 import scala.collection.IndexedSeq
 import scala.concurrent.SyncVar
 import scalaz.stream.Process._
-import scalaz.stream.async.mutable.Signal
-import scalaz.stream.async.mutable.Signal.Msg
-import scalaz.{ Nondeterminism, \/-, -\/, \/ }
+import scalaz.{ \/-, -\/, \/ }
 
 import scalaz.stream._
 import scalaz.concurrent.{ Strategy, Task }
@@ -21,7 +17,6 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
 
   private val logger = Logger.getLogger("proc-binding")
 
-  /*
   "Binding to asynchronous sources" should {
     "non-deterministic interleave of both streams through merge/either" in {
       implicit val strategy =
@@ -93,5 +88,4 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
       sync.get should be equalTo (\/-(IndexedSeq(sum)))
     }
   }
-*/
 }
