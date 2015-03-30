@@ -9,7 +9,7 @@ import org.specs2.mutable.Specification
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.forkjoin.{ ForkJoinPool, ThreadLocalRandom }
-import scalaz.concurrent.Task
+import scalaz.concurrent.{ Strategy, Task }
 import scalaz.stream.{ Process, process1, time }
 import scala.concurrent.duration._
 
@@ -19,7 +19,9 @@ class AtLeastEverySpec extends Specification {
   val P = scalaz.stream.Process
 
   val executor = new ForkJoinPool(2)
-  implicit val ex = newScheduledThreadPool(1, new NamedThreadFactory("Schedulers"))
+
+  implicit val sch = newScheduledThreadPool(1, new NamedThreadFactory("Schedulers"))
+  val str = Strategy.Executor(newFixedThreadPool(2, new NamedThreadFactory("timeout-worker")))
 
   "Process atLeastEvery" should {
     "if we exceed latency for whole provess we will throw TimeoutException/emit default" in {
@@ -72,12 +74,12 @@ class AtLeastEverySpec extends Specification {
         }(executor))
       } yield i
 
-      val p = atLeastEvery(time.awakeEvery(2200 milli), "Task timeout !!!")(io)
+      val p = atLeastEvery(time.awakeEvery(2400 milli)(str, sch), "Task timeout !!!")(io)
       p.take(n)
         .map { r ⇒ logger.info("result - " + r); r }
         .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); P.halt }
         .onComplete { P.eval(Task.delay(logger.debug(s"Process has been completed"))) }
-        .run.run /*Async(_ ⇒ s.put(true))*/
+        .run.run
 
       true should be equalTo true
     }
