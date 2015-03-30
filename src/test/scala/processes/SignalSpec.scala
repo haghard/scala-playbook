@@ -5,7 +5,7 @@ import java.util.concurrent.Executors._
 import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
 import mongo.MongoProgram.NamedThreadFactory
-import scalaz.{ \/-, \/ }
+import scalaz.{ Nondeterminism, \/-, \/ }
 import scala.concurrent.SyncVar
 import scalaz.concurrent.{ Strategy, Task }
 import scalaz.stream.{ process1, Process, async, sink }
@@ -20,7 +20,7 @@ class SignalSpec extends Specification {
 
   "3 writer in 1 signal" should {
     "change mutable state" in {
-      val F = scalaz.Nondeterminism[Task]
+      val ND = Nondeterminism[Task]
       val sync = new SyncVar[Throwable \/ Unit]
       val syncResult = new SyncVar[Int]
 
@@ -42,7 +42,7 @@ class SignalSpec extends Specification {
         ()
       }
 
-      F.nmap3(Task.fork(proc.run[Task]), Task.fork(proc.run[Task]), Task.fork(proc.run[Task]))(f)
+      ND.nmap3(Task.fork(proc.run[Task]), Task.fork(proc.run[Task]), Task.fork(proc.run[Task]))(f)
         .runAsync { _ ⇒
           syncResult.put(signal.get.run)
           signal.close.run

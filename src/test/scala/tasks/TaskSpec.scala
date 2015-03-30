@@ -1,6 +1,7 @@
 package tasks
 
 import java.util.concurrent.Executors
+import java.util.concurrent.Executors._
 import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
@@ -10,14 +11,14 @@ import scala.concurrent.forkjoin.ForkJoinPool
 import scalaz.{ \/, Nondeterminism, \/- }
 import scalaz.concurrent.Task
 
-class ExplicitParallelismSpec extends Specification {
+class TaskSpec extends Specification {
 
   private val logger = Logger.getLogger("tasks")
 
   implicit val executor = new ForkJoinPool(3)
 
-  "Run fib without concurrency" should {
-    "run in same thread" in {
+  "Run fib" should {
+    "in same thread" in {
       def fib(n: Int): Task[Int] = n match {
         case 0 | 1 ⇒ Task now 1
         case n ⇒
@@ -76,6 +77,32 @@ class ExplicitParallelismSpec extends Specification {
       val list = r.run
 
       list.size should be equalTo 4
+    }
+  }
+
+  "Aggregate results" should {
+    "with monoid" in {
+      import scalaz._
+      import Scalaz._
+      val ND = scalaz.Nondeterminism[Task]
+      implicit val worker = newFixedThreadPool(3, new NamedThreadFactory("worker"))
+
+      def fib(n: Int): Task[Int] = n match {
+        case 0 | 1 ⇒ Task now 1
+        case n ⇒
+          for {
+            r ← ND.mapBoth(Task.fork(fib(n - 1)), Task.fork(fib(n - 2)))(_ + _)
+          } yield { logger.info(r); r }
+      }
+
+      //Sum suport commutative laws
+      val m = scalaz.Monoid[Int]
+      val task = ND.aggregateCommutative(Seq(fib(11), fib(12), fib(13), fib(14)))(m)
+      val task1 = ND.aggregate(Seq(fib(11), fib(12), fib(13), fib(14)))(m)
+
+      val r0 = task.attemptRun
+      r0 should be equalTo task1.attemptRun
+      r0 should be equalTo \/-(1364)
     }
   }
 

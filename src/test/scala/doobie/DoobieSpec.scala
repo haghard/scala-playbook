@@ -25,7 +25,6 @@ trait Env extends org.specs2.mutable.Before {
       _ ← sql"""INSERT INTO country VALUES ('RUS', 'Russia', 146270)""".update.run
       _ ← sql"""INSERT INTO country VALUES ('USA', 'United States of America', 320480)""".update.run
     } yield ()).transact(xa).attemptRun
-
   }
 }
 
@@ -84,31 +83,27 @@ class DoobieSpec extends Specification with Mockito {
 
   "Doobie h2 in memory db quering" should {
     "quering" in {
-      //:~/test
-      //mem:test-db
-
       val xa = doobie.util.transactor.DriverManagerTransactor[Task](
         "org.h2.Driver",
-        "jdbc:h2:mem:test-db;DB_CLOSE_DELAY=-1",
+        "jdbc:h2:mem:test-db999;DB_CLOSE_DELAY=-1",
         "sa", "")
 
-      val task = (for {
+      (for {
         _ ← Update0("CREATE TABLE country (code character(3) NOT NULL, name text NOT NULL, population integer NOT NULL)", None).run
         _ ← sql"""INSERT INTO country VALUES ('RUS', 'Russia', 146270)""".update.run
         _ ← sql"""INSERT INTO country VALUES ('USA', 'United States of America', 320480)""".update.run
-        r ← sql"SELECT count(*) FROM country".query[Int].unique
-      } yield (r)).transact(xa)
+      } yield ()).transact(xa).attemptRun
 
-      task.attemptRun should be equalTo \/-(2)
-
-      val task0 = sql"SELECT count(*) FROM country".query[Int].unique.transact(xa)
-      task0.attemptRun must_== \/-(2)
+      val qTask = sql"SELECT count(*) FROM country".query[Int].unique.transact(xa)
+      qTask.attemptRun must_== \/-(2)
     }
   }
 
   case class Country(code: String, name: String, population: Int)
   val list = List(Country("RUS", "Russia", 146270), Country("USA", "United States of America", 320480))
 
+  /*
+  Wait for update in scalaz-stream 0.7a
   "Doobie h2 in memory db streaming thought process" in new Env {
     val xa = doobie.util.transactor.DriverManagerTransactor[Task](
       "org.h2.Driver",
@@ -121,7 +116,7 @@ class DoobieSpec extends Specification with Mockito {
       .transact(xa)
 
     p.runLog.run should be equalTo list.toIndexedSeq
-  }
+  }*/
 
   "Doobie run H2Transactor uses backed JdbcConnectionPool" in new Env {
     import doobie.imports._, scalaz._, scalaz.concurrent.Task
