@@ -28,7 +28,7 @@ package object modules {
    * Abstracting over types
    *
    */
-  trait OptionSig {
+  trait OptionTypes {
     type Option[+_]
     type Some[+A] <: Option[A]
     type None <: Option[Nothing]
@@ -42,7 +42,7 @@ package object modules {
    * It's because we need to be able to project its inner types.
    *
    */
-  abstract class OptionOps[T <: OptionSig] {
+  abstract class OptionOps[T <: OptionTypes] {
 
     def some[A](x: A): T#Some[A]
 
@@ -58,7 +58,7 @@ package object modules {
    *
    */
   object OptionOps {
-    def apply[T <: OptionSig](implicit ops: OptionOps[T]): OptionOps[T] = ops
+    def apply[T <: OptionTypes](implicit ops: OptionOps[T]): OptionOps[T] = ops
   }
 
   /**
@@ -69,7 +69,7 @@ package object modules {
    *
    */
   import scalaz.Show
-  final class OptionShow[T <: OptionSig: OptionOps] {
+  final class OptionShow[T <: OptionTypes: OptionOps] {
 
     def optionShow[A: Show]: Show[T#Option[A]] = {
       // retrieving the typeclass instances
@@ -84,10 +84,10 @@ package object modules {
   }
 
   object OptionShow {
-    implicit def apply[T <: OptionSig: OptionOps]: OptionShow[T] = new OptionShow[T]
+    implicit def apply[T <: OptionTypes: OptionOps]: OptionShow[T] = new OptionShow[T]
   }
 
-  trait ScalaOption extends OptionSig {
+  trait ScalaOption extends OptionTypes {
     type Option[+A] = scala.Option[A]
     type Some[+A] = scala.Some[A]
     type None = scala.None.type
@@ -114,13 +114,13 @@ package object modules {
     case object None extends Option[Nothing]
   }
 
-  trait MyOption extends OptionSig {
+  trait MyOption extends OptionTypes {
     type Option[+A] = scala0.Option[A]
     type Some[+A] = scala0.Some[A]
     type None = scala0.None.type
   }
 
-  object MyOption extends OptionSig {
+  object MyOption extends OptionTypes {
 
     implicit object ops extends OptionOps[MyOption] {
 
@@ -136,7 +136,7 @@ package object modules {
     }
   }
 
-  trait NullOption extends OptionSig {
+  trait NullOption extends OptionTypes {
     type Option[+A] = Any
     type Some[+A] = Any
     type None = Null
@@ -157,7 +157,7 @@ package object modules {
     }
   }
 
-  trait Java8Option extends OptionSig {
+  trait Java8Option extends OptionTypes {
     type Option[+A] = java.util.Optional[_ <: A]
     type Some[+A] = java.util.Optional[_ <: A]
     type None = java.util.Optional[Nothing]
@@ -180,7 +180,7 @@ package object modules {
     }
   }
 
-  class Program[T <: OptionSig: OptionOps](implicit tag: ClassTag[T]) {
+  class Program[T <: OptionTypes: OptionOps](implicit tag: ClassTag[T]) {
     private val logger = Logger.getLogger(classOf[Program[T]])
     private val ops = OptionOps[T]
 

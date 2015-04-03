@@ -78,7 +78,7 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
 
       val source = emitAll(range) |> process1.lift(resource)
 
-      merge.mergeN(source)(consumerStrategy).fold(0) { (a, b) ⇒
+      merge.mergeN(0)(source)(consumerStrategy).fold(0) { (a, b) ⇒
         val r = a + b
         logger.info(s"${Thread.currentThread.getName} - current sum: $r")
         r

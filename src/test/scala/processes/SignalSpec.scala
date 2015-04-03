@@ -36,7 +36,6 @@ class SignalSpec extends Specification {
           ()
 
       def proc = P.emitAll(0 to 10) |> process1.lift { i ⇒
-        Thread.sleep(500)
         logger.info(s"${Thread.currentThread().getName} - calculate value $i")
         signal.compareAndSet(arg ⇒ Some(arg.getOrElse(0) + i)).run
         ()
