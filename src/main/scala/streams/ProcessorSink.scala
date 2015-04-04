@@ -3,7 +3,7 @@ package streams
 import akka.actor.{ Props, ActorLogging }
 import akka.stream.actor.ActorPublisherMessage.{ Cancel, Request }
 import akka.stream.actor.ActorSubscriberMessage.{ OnError, OnComplete, OnNext }
-import akka.stream.actor.{ WatermarkRequestStrategy, RequestStrategy, ActorPublisher, ActorSubscriber }
+import akka.stream.actor._
 import scala.collection.mutable
 
 object ProcessorSink {
@@ -15,7 +15,7 @@ object ProcessorSink {
  * back to underlying pull based scalaz process
  * Gives scalaz process acknowledge with Unit
  *
- * @tparam I
+ * @param I
  */
 class ProcessorSink[I] extends ActorSubscriber with ActorPublisher[I] with ActorLogging {
   private var pubSubDistance = 0l
@@ -33,7 +33,7 @@ class ProcessorSink[I] extends ActorSubscriber with ActorPublisher[I] with Actor
     case OnNext(element: I) ⇒
       pubSubDistance -= 1
       log.info("Delivered sub element: - {} Demand: {}", element, pubSubDistance)
-    //Thread.sleep(100)
+      Thread.sleep(100)
 
     case OnComplete ⇒
       onComplete()
@@ -60,7 +60,7 @@ class ProcessorSink[I] extends ActorSubscriber with ActorPublisher[I] with Actor
           bufferSize -= 1
         }
       }
-    //Thread.sleep(200)
+      Thread.sleep(100)
 
     case Request(n) if (isActive && totalDemand > 0) ⇒
       pubSubDistance += n

@@ -1,12 +1,15 @@
 package streams.intergation
 
-import akka.actor.ActorSystem
-import akka.stream.actor.ActorSubscriber
+import akka.actor.{ ActorRef, ActorSystem }
+import akka.stream.actor.ActorPublisherMessage.Cancel
+import akka.stream.actor.{ ActorPublisher, ActorSubscriber }
 import akka.stream.scaladsl._
 import akka.stream.{ ActorFlowMaterializer, ActorFlowMaterializerSettings }
 import akka.testkit.{ ImplicitSender, TestKit }
 import org.scalatest.{ BeforeAndAfterAll, BeforeAndAfterEach, MustMatchers, WordSpecLike }
+import streams.BatchWriter.WriterDone
 
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ ExecutionContext, SyncVar }
 import scalaz.concurrent.Task
 import scalaz.stream._
@@ -29,8 +32,17 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
   import AkkaContext._
   import streams._
 
-  val n = 100
-  val range = 1 to n
+  val limit = 100
+  val range = 1 to limit
+
+  def throttle[T](rate: FiniteDuration): Flow[T, T, Unit] = {
+    Flow() { implicit builder ⇒
+      import akka.stream.scaladsl.FlowGraph.Implicits._
+      val zip = builder.add(Zip[T, Unit.type]())
+      Source(rate, rate, Unit) ~> zip.in1
+      (zip.in0, zip.out)
+    }.map(_._1)
+  }
 
   "Scalaz-Streams toAkkaFlow" must {
     "run" in {
@@ -55,7 +67,36 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
     }
   }
 
-  "Akka flow to Scalaz-Stream process" must {
+  def zip2Source[T](f: ActorRef, s: ActorRef): Source[(T, T), Unit] =
+    Source() { implicit builder: FlowGraph.Builder ⇒
+      import FlowGraph.Implicits._
+      val zip = builder.add(Zip[T, T]())
+      Source(ActorPublisher[T](f)) ~> zip.in0
+      Source(ActorPublisher[T](s)) ~> zip.in1
+      zip.out
+    }
+
+  "Scalaz-Stream process to Akka flow" must {
+    "run" in {
+      val sync = new SyncVar[Boolean]
+      val odd: Process[Task, Int] = P.emitAll(range).filter(_ % 2 != 0)
+      val even: Process[Task, Int] = P.emitAll(range).filter(_ % 2 == 0)
+
+      val podd = system.actorOf(streams.BatchWriter.props[Int])
+      val peven = system.actorOf(streams.BatchWriter.props[Int])
+
+      (odd to podd.writer[Int]).run.runAsync(_ ⇒ ())
+      (even to peven.writer[Int]).run.runAsync(_ ⇒ ())
+
+      val zip = zip2Source(podd, peven).map(v ⇒ s"${v._1} - ${v._2}")
+      (zip.toMat(Sink.foreach(x ⇒ println(s"read: $x")))(Keep.right)).run()
+        .onComplete { _ ⇒ sync.put(true) }
+
+      sync.get
+    }
+  }
+
+  "Akka Flow to Scalaz-Stream process" must {
     "run" in {
       val sync0 = new SyncVar[Boolean]()
       val sync1 = new SyncVar[Boolean]()
@@ -66,7 +107,7 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
         def sieve(s: Stream[Int]): Stream[Int] =
           s.head #:: sieve(s.tail filter (_ % s.head != 0))
 
-        lazy val primesN = primes.take(100)
+        lazy val primesN = primes.take(limit)
         primesN.contains(n)
       }
 
@@ -88,12 +129,12 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
         bcast.out(2) ~> Flow[Int].filter { isPrime } ~> prime
       }.run
 
-      subEven.toSinkReader[Int].map { x ⇒
+      subEven.reader[Int].map { x ⇒
         println(s"even $x")
         x
-      }.take(n / 2).run.runAsync(_ ⇒ sync0.put(true))
+      }.take(limit / 2).run.runAsync(_ ⇒ sync0.put(true))
 
-      subPrime.toSinkReader[Int].map { x ⇒
+      subPrime.reader[Int].map { x ⇒
         println(s"prime $x")
         x
       }.take(25).run.runAsync(_ ⇒ sync1.put(true))

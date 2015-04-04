@@ -6,6 +6,7 @@ import akka.stream.actor.ActorPublisherMessage.Cancel
 import akka.stream.actor.ActorSubscriberMessage.{ OnComplete, OnError }
 import akka.stream.actor.{ ActorSubscriber, ActorPublisher }
 import mongo.MongoProgram.NamedThreadFactory
+import streams.BatchWriter.WriterDone
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.{ Failure, Success }
@@ -24,6 +25,9 @@ package object streams { outer ⇒
   implicit class ProcessSyntax[I](val self: Process[Task, I]) extends AnyVal {
     def toAkkaFlow(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, Unit] =
       outer.createSink(self)
+
+    def toAkkaFlow(a: ActorRef)(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, Unit] =
+      outer.createSink0(a, self)
 
     def throughAkkaFlow(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, I] =
       outer.createClosedProcess(self)
@@ -52,6 +56,13 @@ package object streams { outer ⇒
     })
   }
 
+  private def createSink0[I](a: ActorRef, process: Process[Task, I])(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, Unit] = {
+    process.onFailure { ex ⇒
+      a ! Cancel
+      P.halt
+    }.to(sink[I](a))
+  }
+
   private def createSink[I](process: Process[Task, I])(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, Unit] = {
     val processor = actorRefFactory.actorOf(ProcessorSink.props[I], name = "sink-proc")
     process.onFailure { ex ⇒
@@ -70,6 +81,10 @@ package object streams { outer ⇒
     io.resource[Task, ActorRef, I ⇒ Task[Unit]] { Task.delay[ActorRef](pub) } { pub ⇒ Task.delay(()) } { pub ⇒
       Task.delay(i ⇒ Task.async[Unit](cb ⇒ pub ! WriteRequest(cb, i)))
     }
+  }
+
+  private def writer[I](pub: ActorRef): scalaz.stream.Sink[Task, I] = {
+    io.resource[Task, ActorRef, I ⇒ Task[Unit]] { Task.delay[ActorRef](pub) } { pub ⇒ Task.delay(pub ! WriterDone) } { pub ⇒ Task.delay(i ⇒ Task.async[Unit](cb ⇒ pub ! WriteRequest(cb, i))) }
   }
 
   /*case class ChannelAcknowledge[I](cb: \/[Throwable, I] ⇒ Unit, i: I)
@@ -94,8 +109,11 @@ package object streams { outer ⇒
 
   implicit class ActorRefSyntax(val self: ActorRef) extends AnyVal {
 
-    def toSinkReader[I]: Process[Task, I] =
+    def reader[I]: Process[Task, I] =
       outer.reader(self)
+
+    def writer[I]: Sink[Task, I] =
+      outer.writer(self)
 
     def akkaChannel[A, B](timeout: FiniteDuration = 10.seconds)(implicit tag: ClassTag[B]): scalaz.stream.Channel[Task, A, B] = {
       implicit val t = akka.util.Timeout(timeout)
