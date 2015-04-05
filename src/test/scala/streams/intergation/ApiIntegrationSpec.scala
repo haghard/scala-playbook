@@ -53,7 +53,8 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
       implicit val M = Monoid[Int]
       val source: Process[Task, Int] = P.emitAll(range)
 
-      source.toAkkaFlow.fold1Map(_ ⇒ 1)
+      source.toAkkaFlow
+        .fold1Map(_ ⇒ 1)
         .runLog.run must be === Vector(range.size)
     }
   }
@@ -67,17 +68,28 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
     }
   }
 
-  def zip2Source[T](f: ActorRef, s: ActorRef): Source[(T, T), Unit] =
-    Source() { implicit builder: FlowGraph.Builder ⇒
-      import FlowGraph.Implicits._
-      val zip = builder.add(Zip[T, T]())
-      Source(ActorPublisher[T](f)) ~> zip.in0
-      Source(ActorPublisher[T](s)) ~> zip.in1
-      zip.out
-    }
-
+  /**
+   * Zip 2 scalaz-stream processes with akka Zip
+   * +-------------+
+   * |Process(odd) |---+
+   * +-------------+   | +---------------+
+   *                   +-|Zip(odd, even) |
+   * +-------------+   | +---------------+
+   * |Process(even)|---+
+   * +-------------+
+   */
   "Scalaz-Stream processes to Akka Source" must {
     "run" in {
+
+      def zip2Source[T](f: ActorRef, s: ActorRef): Source[(T, T), Unit] =
+        Source() { implicit builder: FlowGraph.Builder ⇒
+          import FlowGraph.Implicits._
+          val zip = builder.add(Zip[T, T]())
+          Source(ActorPublisher[T](f)) ~> zip.in0
+          Source(ActorPublisher[T](s)) ~> zip.in1
+          zip.out
+        }
+
       val sync = new SyncVar[Boolean]
       val odd: Process[Task, Int] = P.emitAll(range).filter(_ % 2 != 0)
       val even: Process[Task, Int] = P.emitAll(range).filter(_ % 2 == 0)
@@ -95,27 +107,16 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
     }
   }
 
-  "test flow " must {
-    "run" in {
-      val sync = new SyncVar[Int]
-      val sinkA = Sink.fold[Int, Int](0) { _ + _ }
-      val sinkB = Sink.foreach[Int](x ⇒ println(s"out: $x"))
-
-      FlowGraph.closed(sinkA, sinkB)((_, _)) { implicit b ⇒
-        (a, c) ⇒
-          import FlowGraph.Implicits._
-          val bcast = b.add(Broadcast[Int](2))
-          Source(range) ~> bcast.in
-          bcast.out(0) ~> a
-          bcast.out(1) ~> c
-      }.run()._1.onComplete {
-        case Success(r)  ⇒ sync.put(r)
-        case Failure(ex) ⇒ throw ex
-      }
-      sync.get must be === range.fold(0)(_ + _)
-    }
-  }
-
+  /**
+   * Broadcast from scalaz-stream process to akka flow
+   *                        +------------+
+   *                    +---|Sink.foreach|
+   * +--------------+   |   +------------+
+   * |Process(range)|---+
+   * +--------------+   |   +------------+
+   *                    +---|Sink.foreach|
+   *                        +------------+
+   */
   "Scalaz-Stream process throw Akka Flow" must {
     "run" in {
       val sync = new SyncVar[Boolean]
@@ -143,6 +144,18 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
     }
   }
 
+  /**
+   * Broadcast from akka to scalaz-stream
+   *                              +------------------+
+   *                         +----| Sink.foreach     |
+   *                         |    +------------------+
+   * +-------------------+   |    +------------------+
+   * |(Akka)Source(range)|---+----| Process(subEven) |
+   * +-------------------+   |    +------------------+
+   *                         |    +------------------+
+   *                         +----| Process(subPrime)|
+   *                              +------------------+
+   */
   "Akka Flow to Scalaz-Stream process" must {
     "run" in {
       val sync0 = new SyncVar[Boolean]()
@@ -167,7 +180,7 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
 
       val src = akka.stream.scaladsl.Source(range)
 
-      val g = FlowGraph.closed() { implicit b ⇒
+      FlowGraph.closed() { implicit b ⇒
         import FlowGraph.Implicits._
         val bcast = b.add(Broadcast[Int](3))
         src ~> bcast.in
@@ -188,6 +201,18 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
 
       sync1.get
       sync0.get must be === true
+    }
+  }
+
+  "Scalaz-Stream process through ActorPublisher ActorSubscriber with batching" must {
+    "run" in {
+      val range = 1 to 60
+      //this one fails with undelivered messages for a while
+      val source: Process[Task, Int] = P.emitAll(range)
+      source.throughBufferedAkkaFlow(14)
+        .fold1(_ ++ _)
+        .runLog
+        .run must be === Vector(range.toVector)
     }
   }
 }

@@ -1,5 +1,5 @@
 import java.util.concurrent.Executors
-
+import java.util.concurrent.atomic.AtomicLong
 import akka.actor.{ ActorRefFactory, PoisonPill, ActorRef }
 import akka.stream.ActorFlowMaterializer
 import akka.stream.actor.ActorPublisherMessage.Cancel
@@ -20,9 +20,11 @@ package object streams { outer ⇒
   val P = Process
 
   case class ReadData[I](cb: \/[Throwable, I] ⇒ Unit)
+  case class ReadBatchData[I](cb: \/[Throwable, Vector[I]] ⇒ Unit)
   case class WriteRequest[I](cb: \/[Throwable, Unit] ⇒ Unit, i: I)
 
   implicit class ProcessSyntax[I](val self: Process[Task, I]) extends AnyVal {
+
     def toAkkaFlow(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, Unit] =
       outer.createSink(self)
 
@@ -30,18 +32,45 @@ package object streams { outer ⇒
       outer.createSink0(a, self)
 
     def throughAkkaFlow(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, I] =
-      outer.createClosedProcess(self)
+      outer.createChain(self)
+
+    def throughBufferedAkkaFlow(batchSize: Int)(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, Vector[I]] =
+      outer.createBufferedChain(self, batchSize)
   }
 
-  private def createClosedProcess[I](process: Process[Task, I])(implicit arf: ActorRefFactory, m: ActorFlowMaterializer): Process[Task, I] = {
-    val pub = arf.actorOf(SequentialSinkPublisher.props[I], name = "seq-pub")
+  private def createBufferedChain[I](process: Process[Task, I], batchSize: Int)(implicit arf: ActorRefFactory, m: ActorFlowMaterializer): Process[Task, Vector[I]] = {
+    def errorHandler(pub: ActorRef, sub: ActorRef): Cause ⇒ Process[Task, Vector[I]] = {
+      case cause @ Cause.End ⇒
+        sub ! OnComplete
+        Process.Halt(cause)
+      case cause @ Cause.Kill ⇒
+        pub ! OnError(new Exception("Process killed"))
+        Process.Halt(cause)
+      case cause @ Cause.Error(ex) ⇒
+        pub ! OnError(ex)
+        Process.Halt(cause)
+    }
+
+    val pub = arf.actorOf(SourceBatchedPublisher.props[I], name = "buffer-seq-pub")
+    val sub = arf.actorOf(SinkBatchedSubscriber.props[I](batchSize), name = "buffer-seq-sub")
+    akka.stream.scaladsl.Source(ActorPublisher[I](pub)).to(akka.stream.scaladsl.Sink(ActorSubscriber[I](sub))).run()
+
+    val i = new AtomicLong()
+    (for {
+      p ← (process to sinkReader[I](pub)).splitWith { in ⇒ { i.incrementAndGet() % batchSize == 0 } }.filter(_.size == 1)
+      i ← P.eval(Task.async { cb: (\/[Throwable, Vector[I]] ⇒ Unit) ⇒ sub ! ReadBatchData[I](cb) })
+    } yield i).onHalt(errorHandler(pub, sub))
+  }
+
+  private def createChain[I](process: Process[Task, I])(implicit arf: ActorRefFactory, m: ActorFlowMaterializer): Process[Task, I] = {
+    val pub = arf.actorOf(SequentialSourcePublisher.props[I], name = "seq-pub")
     val sub = arf.actorOf(SequentualSinkSubscriber.props[I], name = "seq-sub")
     val src = akka.stream.scaladsl.Source(ActorPublisher[I](pub))
     val sink = akka.stream.scaladsl.Sink(ActorSubscriber[I](sub))
     src.to(sink).run()
 
     (for {
-      _ ← process to toSink[I](pub)
+      _ ← (process to sinkReader[I](pub))
       r ← P.eval(Task.async { cb: (\/[Throwable, I] ⇒ Unit) ⇒ sub ! ReadData[I](cb) })
     } yield r).onHalt({
       case cause @ Cause.End ⇒
@@ -74,10 +103,10 @@ package object streams { outer ⇒
   private def sink[I](processor: ActorRef)(implicit materializer: ActorFlowMaterializer): Sink[Task, I] = {
     akka.stream.scaladsl.Source(ActorPublisher[I](processor))
       .to(akka.stream.scaladsl.Sink(ActorSubscriber[I](processor))).run()
-    toSink(processor)
+    sinkReader(processor)
   }
 
-  private def toSink[I](pub: ⇒ ActorRef): Sink[Task, I] = {
+  private def sinkReader[I](pub: ⇒ ActorRef): Sink[Task, I] = {
     io.resource[Task, ActorRef, I ⇒ Task[Unit]] { Task.delay[ActorRef](pub) } { pub ⇒ Task.delay(()) } { pub ⇒
       Task.delay(i ⇒ Task.async[Unit](cb ⇒ pub ! WriteRequest(cb, i)))
     }

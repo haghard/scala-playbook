@@ -4,6 +4,7 @@ import java.util.concurrent.Executors._
 import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
+import streams.ReadBatchData
 import scala.collection.IndexedSeq
 import scala.concurrent.SyncVar
 import scalaz.stream.Process._
@@ -16,7 +17,7 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
   val P = scalaz.stream.Process
 
   private val logger = Logger.getLogger("proc-binding")
-
+  /*
   "Binding to asynchronous sources" should {
     "non-deterministic interleave of both streams through merge/either" in {
       implicit val strategy =
@@ -86,6 +87,47 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
         .runAsync(sync.put)
 
       sync.get should be equalTo (\/-(IndexedSeq(sum)))
+    }
+  }
+*/
+
+  "asda" should {
+    "as" in {
+      import scalaz.syntax.equal._
+      val range = 1 until 50
+      import scalaz._
+      import scalaz.std.anyVal._
+      import scalaz.std.list._
+      import scalaz.std.list.listSyntax._
+      import scalaz.std.option._
+      import scalaz.std.vector._
+      import scalaz.std.string._
+      import scalaz.syntax.equal._
+      import scalaz.syntax.foldable._
+
+      //implicit val M = scalaz.Equal[Int]
+      //Process(0, 1, 2, 3, 4).splitOn(2).toList
+
+      implicit val M = Monoid[String]
+
+      var i = 0
+
+      Process("1", "2", "3", "4", "5", "6", "7", "8").splitWith {
+        in ⇒
+          {
+            i += 1
+            i % 3 == 0
+          }
+      }.filter(_.size == 1)
+        .flatMap { tag ⇒
+          P.eval(Task.delay(println(tag)))
+        }.runLog.run
+
+      /*((P.emitAll(range) |> process1.sliding(5)).flatMap { batch =>
+        P.eval(Task.delay(println(batch)))
+      }).runLog.run*/
+
+      1 should be equalTo 1
     }
   }
 }

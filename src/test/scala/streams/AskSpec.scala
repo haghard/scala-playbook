@@ -1,8 +1,8 @@
 package streams
 
 import akka.actor._
-import akka.testkit.{ ImplicitSender, TestKit }
 import org.apache.log4j.Logger
+import akka.testkit.{ ImplicitSender, TestKit }
 import org.scalatest.{ BeforeAndAfterAll, BeforeAndAfterEach, MustMatchers, WordSpecLike }
 
 import scala.collection.mutable.Buffer
