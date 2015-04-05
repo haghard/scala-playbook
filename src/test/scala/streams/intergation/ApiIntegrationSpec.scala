@@ -1,16 +1,15 @@
 package streams.intergation
 
 import akka.actor.{ ActorRef, ActorSystem }
-import akka.stream.actor.ActorPublisherMessage.Cancel
-import akka.stream.actor.{ ActorPublisher, ActorSubscriber }
+import akka.stream.actor.{ ActorSubscriber, ActorPublisher }
 import akka.stream.scaladsl._
 import akka.stream.{ ActorFlowMaterializer, ActorFlowMaterializerSettings }
 import akka.testkit.{ ImplicitSender, TestKit }
 import org.scalatest.{ BeforeAndAfterAll, BeforeAndAfterEach, MustMatchers, WordSpecLike }
-import streams.BatchWriter.WriterDone
 
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{ ExecutionContext, SyncVar }
+import scala.concurrent.{ Await, Future, SyncVar, ExecutionContext }
+import scala.util.{ Success, Failure }
 import scalaz.concurrent.Task
 import scalaz.stream._
 
@@ -29,6 +28,7 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
   }
 
   val P = Process
+
   import AkkaContext._
   import streams._
 
@@ -76,23 +76,70 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
       zip.out
     }
 
-  "Scalaz-Stream process to Akka flow" must {
+  "Scalaz-Stream processes to Akka Source" must {
     "run" in {
       val sync = new SyncVar[Boolean]
       val odd: Process[Task, Int] = P.emitAll(range).filter(_ % 2 != 0)
       val even: Process[Task, Int] = P.emitAll(range).filter(_ % 2 == 0)
 
-      val podd = system.actorOf(streams.BatchWriter.props[Int])
-      val peven = system.actorOf(streams.BatchWriter.props[Int])
+      val Podd = system.actorOf(streams.BatchWriter.props[Int])
+      val Peven = system.actorOf(streams.BatchWriter.props[Int])
 
-      (odd to podd.writer[Int]).run.runAsync(_ ⇒ ())
-      (even to peven.writer[Int]).run.runAsync(_ ⇒ ())
+      (odd to Podd.writer[Int]).run.runAsync(_ ⇒ ())
+      (even to Peven.writer[Int]).run.runAsync(_ ⇒ ())
 
-      val zip = zip2Source(podd, peven).map(v ⇒ s"${v._1} - ${v._2}")
-      (zip.toMat(Sink.foreach(x ⇒ println(s"read: $x")))(Keep.right)).run()
+      val zipSrc = zip2Source(Podd, Peven) map { v ⇒ s"${v._1} - ${v._2}" }
+      (zipSrc.toMat(Sink.foreach(x ⇒ println(s"read: $x")))(Keep.right)).run()
         .onComplete { _ ⇒ sync.put(true) }
-
       sync.get
+    }
+  }
+
+  "test flow " must {
+    "run" in {
+      val sync = new SyncVar[Int]
+      val sinkA = Sink.fold[Int, Int](0) { _ + _ }
+      val sinkB = Sink.foreach[Int](x ⇒ println(s"out: $x"))
+
+      FlowGraph.closed(sinkA, sinkB)((_, _)) { implicit b ⇒
+        (a, c) ⇒
+          import FlowGraph.Implicits._
+          val bcast = b.add(Broadcast[Int](2))
+          Source(range) ~> bcast.in
+          bcast.out(0) ~> a
+          bcast.out(1) ~> c
+      }.run()._1.onComplete {
+        case Success(r)  ⇒ sync.put(r)
+        case Failure(ex) ⇒ throw ex
+      }
+      sync.get must be === range.fold(0)(_ + _)
+    }
+  }
+
+  "Scalaz-Stream process throw Akka Flow" must {
+    "run" in {
+      val sync = new SyncVar[Boolean]
+      val digits: Process[Task, Int] = P.emitAll(range)
+      val p = system.actorOf(streams.BatchWriter.props[Int])
+      (digits to p.writer[Int]).run.runAsync(_ ⇒ ())
+
+      val leftSink = Sink.foreach[Int](x ⇒ println(s"left: $x"))
+      val rightSink = Sink.foreach[Int](x ⇒ println(s"right: $x"))
+
+      val (lf, rf) = FlowGraph.closed(leftSink, rightSink)((_, _)) { implicit b ⇒
+        (lout, rout) ⇒
+          import FlowGraph.Implicits._
+          val bcast = b.add(Broadcast[Int](2))
+          Source(ActorPublisher[Int](p)) ~> bcast
+          bcast.out(0) ~> lout
+          bcast.out(1) ~> rout
+      }.run()
+
+      lf zip rf onComplete {
+        case Success(r)  ⇒ sync.put(true)
+        case Failure(ex) ⇒ throw ex
+      }
+      sync.get must be === true
     }
   }
 
