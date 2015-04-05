@@ -34,7 +34,7 @@ class ProcessorSink[I] extends ActorSubscriber with ActorPublisher[I] with Actor
     case OnNext(element: I) ⇒
       pubSubGap -= 1
       log.info("Delivered sub element: - {} Demand: {}", element, pubSubGap)
-      Thread.sleep(50) // for test purpose
+    //Thread.sleep(50) // for test purpose
 
     case OnComplete ⇒
       onComplete()
@@ -48,7 +48,7 @@ class ProcessorSink[I] extends ActorSubscriber with ActorPublisher[I] with Actor
   }
 
   val publisherOps: Receive = {
-    case r: WriteRequest[I] ⇒
+    case r: WriteRequest[I] @unchecked ⇒
       if (bufferSize < pubSubGap) {
         r.cb(().right) //do acking
         buffer.enqueue(r.i)
@@ -58,7 +58,7 @@ class ProcessorSink[I] extends ActorSubscriber with ActorPublisher[I] with Actor
         lastReq = Option(r)
         deliverBatch
       }
-      Thread.sleep(50) // for test purpose
+    //Thread.sleep(50) // for test purpose
 
     case Request(n) if (isActive && totalDemand > 0) ⇒
       pubSubGap += n

@@ -39,10 +39,19 @@ package object streams { outer ⇒
   }
 
   private def createBufferedChain[I](process: Process[Task, I], batchSize: Int)(implicit arf: ActorRefFactory, m: ActorFlowMaterializer): Process[Task, Vector[I]] = {
-    def errorHandler(pub: ActorRef, sub: ActorRef): Cause ⇒ Process[Task, Vector[I]] = {
+    def halter(pub: ActorRef, sub: ActorRef): Cause ⇒ Process[Task, Vector[I]] = {
       case cause @ Cause.End ⇒
-        sub ! OnComplete
-        Process.Halt(cause)
+        P.eval(Task.async { cb: (\/[Throwable, Vector[I]] ⇒ Unit) ⇒ sub ! ReadBatchData[I](cb) }).onHalt({
+          case cause @ Cause.End ⇒
+            sub ! OnComplete
+            Process.Halt(cause)
+          case cause @ Cause.Kill ⇒
+            pub ! OnError(new Exception("Process killed"))
+            Process.Halt(cause)
+          case cause @ Cause.Error(ex) ⇒
+            pub ! OnError(ex)
+            Process.Halt(cause)
+        })
       case cause @ Cause.Kill ⇒
         pub ! OnError(new Exception("Process killed"))
         Process.Halt(cause)
@@ -59,7 +68,7 @@ package object streams { outer ⇒
     (for {
       p ← (process to sinkReader[I](pub)).splitWith { in ⇒ { i.incrementAndGet() % batchSize == 0 } }.filter(_.size == 1)
       i ← P.eval(Task.async { cb: (\/[Throwable, Vector[I]] ⇒ Unit) ⇒ sub ! ReadBatchData[I](cb) })
-    } yield i).onHalt(errorHandler(pub, sub))
+    } yield i).onHalt(halter(pub, sub))
   }
 
   private def createChain[I](process: Process[Task, I])(implicit arf: ActorRefFactory, m: ActorFlowMaterializer): Process[Task, I] = {

@@ -206,10 +206,8 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
 
   "Scalaz-Stream process through ActorPublisher ActorSubscriber with batching" must {
     "run" in {
-      val range = 1 to 60
-      //this one fails with undelivered messages for a while
       val source: Process[Task, Int] = P.emitAll(range)
-      source.throughBufferedAkkaFlow(14)
+      source.throughBufferedAkkaFlow(12)
         .fold1(_ ++ _)
         .runLog
         .run must be === Vector(range.toVector)
