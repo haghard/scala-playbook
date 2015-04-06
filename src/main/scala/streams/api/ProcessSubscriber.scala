@@ -5,11 +5,11 @@ import org.reactivestreams.{ Subscription, Subscriber }
 
 import scala.concurrent.SyncVar
 
-final class ProcessSubscriber[T](batchSize: Int, sync: SyncVar[Boolean]) extends Subscriber[T] {
+class ProcessSubscriber[T](batchSize: Int, sync: SyncVar[Boolean]) extends Subscriber[T] {
   val logger = Logger.getLogger("process-sub")
 
   private var bs = batchSize
-  private var subscription: Option[Subscription] = None
+  protected var subscription: Option[Subscription] = None
 
   override def onNext(t: T): Unit = {
     logger.info(s"${Thread.currentThread().getName} onNext: $t")
@@ -32,6 +32,7 @@ final class ProcessSubscriber[T](batchSize: Int, sync: SyncVar[Boolean]) extends
 
   override def onComplete(): Unit = {
     logger.info("ProcessSubscriber onComplete")
+    subscription = None
     sync.put(true)
   }
 }

@@ -13,24 +13,29 @@ class ProcessPublisher[T](source: Process[Task, T], batchSize: Int)(implicit ex:
 
   val P = Process
   private val signal = async.signalOf(0l)(Strategy.Executor(ex))
+  private val signalP = signal.discrete
 
   private var subscriber: Option[Subscriber[_ >: T]] = None
 
   private val halter: Cause ⇒ Process[Task, Unit] = {
     case cause @ Cause.End ⇒
       subscriber.fold(())(_.onComplete())
+      signal.close.run
       Process.Halt(cause)
     case cause @ Cause.Kill ⇒
-      subscriber.fold(())(_.onError(new Exception("Killed")))
+      subscriber.fold(())(_.onComplete())
+      signal.close.run
       Process.Halt(cause)
     case cause @ Cause.Error(ex) ⇒
+      subscriber.fold(())(_.onComplete())
+      signal.close.run
       subscriber.fold(())(_.onError(ex))
       Process.Halt(cause)
   }
 
   private val secret = new Subscription {
     override def cancel(): Unit = {
-      subscriber.fold(()) { _.onComplete() }
+      signal.close.runAsync(_ ⇒ ())
     }
 
     override def request(l: Long): Unit = {
@@ -44,9 +49,9 @@ class ProcessPublisher[T](source: Process[Task, T], batchSize: Int)(implicit ex:
    * It doesn't support dynamic batchSize resizing
    */
   (for {
-    batch ← signal.discrete.zip(source.chunk(batchSize))
+    batch ← signalP zip source.chunk(batchSize)
     i ← P.emitAll(batch._2)
-    r ← P.eval(Task.delay { subscriber.fold(())(_.onNext(i.asInstanceOf[T])) })
+    r ← P.eval(Task.delay { subscriber.fold(())(_.onNext(i.asInstanceOf[T])) }) /*++ P.eval(Task.delay(Thread.sleep(100)))*/
   } yield r).onHalt(halter).run.runAsync(_ ⇒ ())
 
   /**
