@@ -5,6 +5,7 @@ import akka.stream.ActorFlowMaterializer
 import akka.stream.actor.ActorPublisherMessage.Cancel
 import akka.stream.actor.ActorSubscriberMessage.{ OnComplete, OnError }
 import akka.stream.actor.{ ActorSubscriber, ActorPublisher }
+import akka.stream.scaladsl.{ Broadcast, FlowGraph, Flow }
 import mongo.MongoProgram.NamedThreadFactory
 import streams.BatchWriter.WriterDone
 import scala.concurrent.duration._
@@ -34,24 +35,15 @@ package object streams { outer ⇒
     def throughAkkaFlow(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, I] =
       outer.createChain(self)
 
-    def throughBufferedAkkaFlow(batchSize: Int)(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, Vector[I]] =
-      outer.createBufferedChain(self, batchSize)
+    def throughBufferedAkkaFlow(requestSize: Int, f: Flow[I, I, Unit])(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, Vector[I]] =
+      outer.createBufferedChain(self, requestSize, f)
   }
 
-  private def createBufferedChain[I](process: Process[Task, I], batchSize: Int)(implicit arf: ActorRefFactory, m: ActorFlowMaterializer): Process[Task, Vector[I]] = {
+  private def createBufferedChain[I](process: Process[Task, I], batchSize: Int, f: Flow[I, I, Unit])(implicit arf: ActorRefFactory, m: ActorFlowMaterializer): Process[Task, Vector[I]] = {
     def halter(pub: ActorRef, sub: ActorRef): Cause ⇒ Process[Task, Vector[I]] = {
       case cause @ Cause.End ⇒
-        P.eval(Task.async { cb: (\/[Throwable, Vector[I]] ⇒ Unit) ⇒ sub ! ReadBatchData[I](cb) }).onHalt({
-          case cause @ Cause.End ⇒
-            sub ! OnComplete
-            Process.Halt(cause)
-          case cause @ Cause.Kill ⇒
-            pub ! OnError(new Exception("Process killed"))
-            Process.Halt(cause)
-          case cause @ Cause.Error(ex) ⇒
-            pub ! OnError(ex)
-            Process.Halt(cause)
-        })
+        sub ! OnComplete
+        Process.Halt(cause)
       case cause @ Cause.Kill ⇒
         pub ! OnError(new Exception("Process killed"))
         Process.Halt(cause)
@@ -60,13 +52,20 @@ package object streams { outer ⇒
         Process.Halt(cause)
     }
 
-    val pub = arf.actorOf(SourceBatchedPublisher.props[I], name = "buffer-seq-pub")
-    val sub = arf.actorOf(SinkBatchedSubscriber.props[I](batchSize), name = "buffer-seq-sub")
-    akka.stream.scaladsl.Source(ActorPublisher[I](pub)).to(akka.stream.scaladsl.Sink(ActorSubscriber[I](sub))).run()
+    val pub = arf.actorOf(SourceBatchedPublisher.props[I], name = "publisher")
+    val sub = arf.actorOf(SinkBatchedSubscriber.props[I](batchSize), name = "subscriber")
 
-    val i = new AtomicLong()
+    val src = akka.stream.scaladsl.Source(ActorPublisher[I](pub))
+    val sink = akka.stream.scaladsl.Sink(ActorSubscriber[I](sub))
+
+    FlowGraph.closed(src, sink)((_, _)) { implicit b ⇒
+      (in, out) ⇒
+        import FlowGraph.Implicits._
+        in ~> f ~> out
+    }.run()
+
     (for {
-      p ← (process to sinkReader[I](pub)).splitWith { in ⇒ { i.incrementAndGet() % batchSize == 0 } }.filter(_.size == 1)
+      _ ← (process to sinkReader[I](pub)) chunk batchSize
       i ← P.eval(Task.async { cb: (\/[Throwable, Vector[I]] ⇒ Unit) ⇒ sub ! ReadBatchData[I](cb) })
     } yield i).onHalt(halter(pub, sub))
   }

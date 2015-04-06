@@ -8,7 +8,7 @@ import akka.testkit.{ ImplicitSender, TestKit }
 import org.scalatest.{ BeforeAndAfterAll, BeforeAndAfterEach, MustMatchers, WordSpecLike }
 
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{ Await, Future, SyncVar, ExecutionContext }
+import scala.concurrent.{ SyncVar, ExecutionContext }
 import scala.util.{ Success, Failure }
 import scalaz.concurrent.Task
 import scalaz.stream._
@@ -32,7 +32,7 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
   import AkkaContext._
   import streams._
 
-  val limit = 100
+  val limit = 231
   val range = 1 to limit
 
   def throttle[T](rate: FiniteDuration): Flow[T, T, Unit] = {
@@ -172,7 +172,7 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
       }
 
       val subEven = system.actorOf(Reader.props[Int], "even-reader")
-      val subPrime = system.actorOf(streams.Reader.props[Int], "prime-reader")
+      val subPrime = system.actorOf(Reader.props[Int], "prime-reader")
 
       val odd = akka.stream.scaladsl.Sink.foreach[Int](v ⇒ println(s"odd $v"))
       val even = akka.stream.scaladsl.Sink(ActorSubscriber[Int](subEven))
@@ -206,11 +206,17 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
 
   "Scalaz-Stream process through ActorPublisher ActorSubscriber with batching" must {
     "run" in {
+      val size = 16 //
       val source: Process[Task, Int] = P.emitAll(range)
-      source.throughBufferedAkkaFlow(12)
+      val flow = Flow[Int].map(_ * 2)
+
+      implicit val mat = ActorFlowMaterializer(
+        ActorFlowMaterializerSettings(system)
+          .withInputBuffer(initialSize = size * 2, maxSize = size * 2))
+
+      (source.throughBufferedAkkaFlow(size, flow)(system, mat))
         .fold1(_ ++ _)
-        .runLog
-        .run must be === Vector(range.toVector)
+        .runLog.run must be === Vector(range.toVector.map(_ * 2))
     }
   }
 }

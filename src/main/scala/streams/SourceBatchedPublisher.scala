@@ -16,7 +16,6 @@ class SourceBatchedPublisher[T] extends ActorPublisher[T] with ActorLogging {
 
   override def receive: Receive = {
     case r: WriteRequest[T] ⇒
-      //Thread.sleep(100)
       if (pubSubGap > 0) {
         pubSubGap -= 1
         onNext(r.i)
@@ -26,6 +25,7 @@ class SourceBatchedPublisher[T] extends ActorPublisher[T] with ActorLogging {
       }
 
     case Request(n) if (isActive && totalDemand > 0) ⇒
+      log.info("Request: {}", n)
       pubSubGap += n
 
       for {
