@@ -6,7 +6,12 @@ import org.reactivestreams.{ Subscription, Subscriber, Publisher }
 import scalaz.concurrent.{ Task, Strategy }
 import scalaz.stream.{ Process, Cause, async }
 
-class ProcessPublisher[T](source: Process[Task, T], batchSize: Int)(implicit ex: ExecutorService) extends Publisher[T] {
+object ProcessPublisher {
+  def apply[T](source: Process[Task, T], batchSize: Int)(implicit ex: ExecutorService) =
+    new ProcessPublisher[T](source, batchSize)
+}
+
+class ProcessPublisher[T] private (source: Process[Task, T], batchSize: Int)(implicit ex: ExecutorService) extends Publisher[T] {
   require(batchSize > 0, "batchSize must be greater than zero!, was: " + batchSize)
 
   val logger = Logger.getLogger("process-pub")
@@ -19,6 +24,7 @@ class ProcessPublisher[T](source: Process[Task, T], batchSize: Int)(implicit ex:
 
   private val halter: Cause ⇒ Process[Task, Unit] = {
     case cause @ Cause.End ⇒
+      logger.info("Stream is exhausted")
       subscriber.fold(())(_.onComplete())
       signal.close.run
       Process.Halt(cause)
@@ -51,7 +57,7 @@ class ProcessPublisher[T](source: Process[Task, T], batchSize: Int)(implicit ex:
   (for {
     batch ← signalP zip source.chunk(batchSize)
     i ← P.emitAll(batch._2)
-    r ← P.eval(Task.delay { subscriber.fold(())(_.onNext(i.asInstanceOf[T])) }) /*++ P.eval(Task.delay(Thread.sleep(100)))*/
+    r ← P.eval(Task.delay { subscriber.fold(())(_.onNext(i.asInstanceOf[T])) }) /*++ P.eval(Task.delay(Thread.sleep(50)))*/
   } yield r).onHalt(halter).run.runAsync(_ ⇒ ())
 
   /**

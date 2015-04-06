@@ -1,11 +1,15 @@
 package streams.intergation
 
+import java.util.concurrent.Executors._
+
 import akka.actor.{ ActorRef, ActorSystem }
 import akka.stream.actor.{ ActorSubscriber, ActorPublisher }
 import akka.stream.scaladsl._
 import akka.stream.{ ActorFlowMaterializer, ActorFlowMaterializerSettings }
 import akka.testkit.{ ImplicitSender, TestKit }
+import mongo.MongoProgram.NamedThreadFactory
 import org.scalatest.{ BeforeAndAfterAll, BeforeAndAfterEach, MustMatchers, WordSpecLike }
+import streams.api.ProcessPublisher
 
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ SyncVar, ExecutionContext }
@@ -32,7 +36,7 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
   import AkkaContext._
   import streams._
 
-  val limit = 231
+  val limit = 152
   val range = 1 to limit
 
   def throttle[T](rate: FiniteDuration): Flow[T, T, Unit] = {
@@ -217,6 +221,28 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
       (source.throughBufferedAkkaFlow(size, flow)(system, mat))
         .fold1(_ ++ _)
         .runLog.run must be === Vector(range.toVector.map(_ * 2))
+    }
+  }
+
+  "ProcessPublisher to Akka Flow" must {
+    "run" in {
+      val size = 8
+      val sync = new SyncVar[Boolean]()
+      implicit val ex = newFixedThreadPool(3, new NamedThreadFactory("pub-sub"))
+      implicit val mat = ActorFlowMaterializer(
+        ActorFlowMaterializerSettings(system)
+          .withInputBuffer(initialSize = size * 2, maxSize = size * 2))
+
+      //val source: Process[Task, Int] = P.emitAll(range)
+      val akkaSource = akka.stream.scaladsl.Source(ProcessPublisher[Int](P.emitAll(range), size))
+      val sink = akka.stream.scaladsl.Sink.foreach[Int](x ⇒ println(s"${Thread.currentThread().getName} out: $x"))
+
+      FlowGraph.closed(akkaSource, sink)((_, _)) { implicit b ⇒
+        import FlowGraph.Implicits._
+        (src, s) ⇒ src ~> Flow[Int].map(_ * 5) ~> s
+      }.run()(mat)._2.onComplete { _ ⇒ sync.put(true) }
+
+      sync.get
     }
   }
 }

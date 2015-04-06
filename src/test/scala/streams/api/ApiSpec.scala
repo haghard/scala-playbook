@@ -1,7 +1,6 @@
 package streams.api
 
 import java.util.concurrent.Executors._
-
 import org.specs2.mutable.Specification
 import mongo.MongoProgram.NamedThreadFactory
 
@@ -21,7 +20,7 @@ class ApiSpec extends Specification {
       val sync = new SyncVar[Boolean]()
       val source: Process[Task, Int] = Process.emitAll(range)
 
-      new ProcessPublisher[Int](source, s)
+      ProcessPublisher[Int](source, s)
         .subscribe(new ProcessSubscriber[Int](s, sync))
 
       sync.get should be equalTo true
@@ -45,7 +44,7 @@ class ApiSpec extends Specification {
       val sync = new SyncVar[Boolean]()
       val source: Process[Task, Int] = Process.emitAll(range)
 
-      new ProcessPublisher[Int](source, s)
+      ProcessPublisher[Int](source, s)
         .subscribe(new ProcessSubscriber[Int](s, sync) with CancelableSubscriber[Int])
 
       sync.get should be equalTo true
