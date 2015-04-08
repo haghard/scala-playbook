@@ -208,7 +208,7 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
     }
   }
 
-  "Scalaz-Stream process through ActorPublisher ActorSubscriber with batching" must {
+  "Scalaz-Stream process through Akka Flow with batching" must {
     "run" in {
       val size = 16 //
       val source: Process[Task, Int] = P.emitAll(range)
@@ -229,17 +229,17 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
       val size = 8
       val sync = new SyncVar[Boolean]()
       implicit val ex = newFixedThreadPool(3, new NamedThreadFactory("pub-sub"))
+
       implicit val mat = ActorFlowMaterializer(
         ActorFlowMaterializerSettings(system)
-          .withInputBuffer(initialSize = size * 2, maxSize = size * 2))
+          .withInputBuffer(initialSize = size * 2, maxSize = size * 4))
 
-      //val source: Process[Task, Int] = P.emitAll(range)
-      val akkaSource = akka.stream.scaladsl.Source(ProcessPublisher[Int](P.emitAll(range), size))
-      val sink = akka.stream.scaladsl.Sink.foreach[Int](x ⇒ println(s"${Thread.currentThread().getName} out: $x"))
+      val akkaSource = akka.stream.scaladsl.Source(ProcessPublisher[Int](P.emitAll(range)))
+      val sink = akka.stream.scaladsl.Sink.foreach[Int](x ⇒ println(s"out $x"))
 
       FlowGraph.closed(akkaSource, sink)((_, _)) { implicit b ⇒
         import FlowGraph.Implicits._
-        (src, s) ⇒ src ~> Flow[Int].map(_ * 5) ~> s
+        (src, s) ⇒ src ~> Flow[Int].map(_ * 1) ~> s
       }.run()(mat)._2.onComplete { _ ⇒ sync.put(true) }
 
       sync.get

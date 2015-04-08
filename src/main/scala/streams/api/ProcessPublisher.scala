@@ -7,14 +7,12 @@ import scalaz.concurrent.{ Task, Strategy }
 import scalaz.stream.{ Process, Cause, async }
 
 object ProcessPublisher {
-  def apply[T](source: Process[Task, T], batchSize: Int)(implicit ex: ExecutorService) =
-    new ProcessPublisher[T](source, batchSize)
+  def apply[T](source: Process[Task, T])(implicit ex: ExecutorService) =
+    new ProcessPublisher[T](source)
 }
 
-class ProcessPublisher[T] private (source: Process[Task, T], batchSize: Int)(implicit ex: ExecutorService) extends Publisher[T] {
-  require(batchSize > 0, "batchSize must be greater than zero!, was: " + batchSize)
-
-  val logger = Logger.getLogger("process-pub")
+class ProcessPublisher[T] private (source: Process[Task, T])(implicit ex: ExecutorService) extends Publisher[T] {
+  private val logger = Logger.getLogger("process-pub")
 
   val P = Process
   private val signal = async.signalOf(0l)(Strategy.Executor(ex))
@@ -33,9 +31,13 @@ class ProcessPublisher[T] private (source: Process[Task, T], batchSize: Int)(imp
       signal.close.run
       Process.Halt(cause)
     case cause @ Cause.Error(ex) ⇒
-      subscriber.fold(())(_.onComplete())
-      signal.close.run
-      subscriber.fold(())(_.onError(ex))
+      if (ex.getMessage == "IOF") {
+        subscriber.fold(())(_.onComplete())
+        signal.close.run
+      } else {
+        subscriber.fold(())(_.onError(ex))
+        signal.close.run
+      }
       Process.Halt(cause)
   }
 
@@ -47,25 +49,26 @@ class ProcessPublisher[T] private (source: Process[Task, T], batchSize: Int)(imp
     override def request(l: Long): Unit = {
       require(l > 0, s" $subscriber violated the Reactive Streams rule 3.9 by requesting a non-positive number of elements.")
       signal.set(l)
-        .runAsync(_ ⇒ logger.info(s"${Thread.currentThread().getName} request: $l"))
+        .runAsync(_ ⇒ logger.info(s"request: $l"))
     }
   }
 
-  /**
-   * It doesn't support dynamic batchSize resizing
-   */
+  val chunkedSource = streams.io.chunkR(source)
   (for {
-    batch ← signalP zip source.chunk(batchSize)
-    i ← P.emitAll(batch._2)
-    r ← P.eval(Task.delay { subscriber.fold(())(_.onNext(i.asInstanceOf[T])) }) /*++ P.eval(Task.delay(Thread.sleep(50)))*/
-  } yield r).onHalt(halter).run.runAsync(_ ⇒ ())
+    reqSize ← signalP.filter(_ > 0)
+    batch ← chunkedSource.chunk(reqSize.toInt)
+    r ← P.emitAll(batch).flatMap(i ⇒ P.eval(Task.delay { subscriber.fold(())(_.onNext(i)) }))
+  } yield {
+    if (batch.size != reqSize.toInt) throw new Exception("IOF")
+  }).onHalt(halter).run[Task].runAsync(_ ⇒ ())
 
   /**
    *
    * @param sub
    */
   override def subscribe(sub: Subscriber[_ >: T]): Unit = {
-    subscriber = Option(sub)
-    sub.onSubscribe(secret)
+    subscriber.fold { subscriber = Option(sub); sub.onSubscribe(secret) } { r ⇒
+      throw new IllegalStateException("Only one subscription is available")
+    }
   }
 }

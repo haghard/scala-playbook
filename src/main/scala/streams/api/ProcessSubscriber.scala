@@ -12,7 +12,7 @@ class ProcessSubscriber[T](batchSize: Int, sync: SyncVar[Boolean]) extends Subsc
   protected var subscription: Option[Subscription] = None
 
   override def onNext(t: T): Unit = {
-    logger.info(s"${Thread.currentThread().getName} onNext: $t")
+    logger.info(s"onNext: $t")
     bs -= 1
     if (bs == 0) {
       bs = batchSize

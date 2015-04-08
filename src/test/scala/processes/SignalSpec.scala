@@ -5,10 +5,11 @@ import java.util.concurrent.Executors._
 import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
 import mongo.MongoProgram.NamedThreadFactory
+import scalaz.stream.Process._
 import scalaz.{ Nondeterminism, \/-, \/ }
 import scala.concurrent.SyncVar
 import scalaz.concurrent.{ Strategy, Task }
-import scalaz.stream.{ process1, Process, async, sink }
+import scalaz.stream._
 
 class SignalSpec extends Specification {
   val P = scalaz.stream.Process

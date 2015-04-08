@@ -1,11 +1,10 @@
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicLong
 import akka.actor.{ ActorRefFactory, PoisonPill, ActorRef }
 import akka.stream.ActorFlowMaterializer
 import akka.stream.actor.ActorPublisherMessage.Cancel
 import akka.stream.actor.ActorSubscriberMessage.{ OnComplete, OnError }
 import akka.stream.actor.{ ActorSubscriber, ActorPublisher }
-import akka.stream.scaladsl.{ Broadcast, FlowGraph, Flow }
+import akka.stream.scaladsl.{ FlowGraph, Flow }
 import mongo.MongoProgram.NamedThreadFactory
 import streams.BatchWriter.WriterDone
 import scala.concurrent.duration._
@@ -65,7 +64,7 @@ package object streams { outer ⇒
     }.run()
 
     (for {
-      _ ← (process to sinkReader[I](pub)) chunk batchSize
+      _ ← (process to sourceWriter[I](pub)) chunk batchSize
       i ← P.eval(Task.async { cb: (\/[Throwable, Vector[I]] ⇒ Unit) ⇒ sub ! ReadBatchData[I](cb) })
     } yield i).onHalt(halter(pub, sub))
   }
@@ -78,7 +77,7 @@ package object streams { outer ⇒
     src.to(sink).run()
 
     (for {
-      _ ← (process to sinkReader[I](pub))
+      _ ← (process to sourceWriter[I](pub))
       r ← P.eval(Task.async { cb: (\/[Throwable, I] ⇒ Unit) ⇒ sub ! ReadData[I](cb) })
     } yield r).onHalt({
       case cause @ Cause.End ⇒
@@ -111,17 +110,17 @@ package object streams { outer ⇒
   private def sink[I](processor: ActorRef)(implicit materializer: ActorFlowMaterializer): Sink[Task, I] = {
     akka.stream.scaladsl.Source(ActorPublisher[I](processor))
       .to(akka.stream.scaladsl.Sink(ActorSubscriber[I](processor))).run()
-    sinkReader(processor)
+    sourceWriter(processor)
   }
 
-  private def sinkReader[I](pub: ⇒ ActorRef): Sink[Task, I] = {
-    io.resource[Task, ActorRef, I ⇒ Task[Unit]] { Task.delay[ActorRef](pub) } { pub ⇒ Task.delay(()) } { pub ⇒
+  private def sourceWriter[I](pub: ⇒ ActorRef): Sink[Task, I] = {
+    scalaz.stream.io.resource[Task, ActorRef, I ⇒ Task[Unit]] { Task.delay[ActorRef](pub) } { pub ⇒ Task.delay(()) } { pub ⇒
       Task.delay(i ⇒ Task.async[Unit](cb ⇒ pub ! WriteRequest(cb, i)))
     }
   }
 
   private def writer[I](pub: ActorRef): scalaz.stream.Sink[Task, I] = {
-    io.resource[Task, ActorRef, I ⇒ Task[Unit]] { Task.delay[ActorRef](pub) } { pub ⇒ Task.delay(pub ! WriterDone) } { pub ⇒ Task.delay(i ⇒ Task.async[Unit](cb ⇒ pub ! WriteRequest(cb, i))) }
+    scalaz.stream.io.resource[Task, ActorRef, I ⇒ Task[Unit]] { Task.delay[ActorRef](pub) } { pub ⇒ Task.delay(pub ! WriterDone) } { pub ⇒ Task.delay(i ⇒ Task.async[Unit](cb ⇒ pub ! WriteRequest(cb, i))) }
   }
 
   /*case class ChannelAcknowledge[I](cb: \/[Throwable, I] ⇒ Unit, i: I)
@@ -158,14 +157,14 @@ package object streams { outer ⇒
     }
     def requestRes[A, B](timeout: FiniteDuration = 10.seconds)(implicit tag: ClassTag[B]) = {
       implicit val t = akka.util.Timeout(timeout)
-      io.resource(Task.delay(self))(a ⇒ Task.delay(a ! PoisonPill)) { a ⇒
+      scalaz.stream.io.resource(Task.delay(self))(a ⇒ Task.delay(a ! PoisonPill)) { a ⇒
         Task delay { m: A ⇒ (a ask m).mapTo[B] toTask }
       }
     }
   }
 
   def reader[I](sub: ActorRef): scalaz.stream.Process[Task, I] = {
-    io.resource[Task, ActorRef, I] { Task.delay[ActorRef](sub) } { sub ⇒ Task.delay(()) } { sub ⇒ Task.async(cb ⇒ sub ! ReadData[I](cb)) }
+    scalaz.stream.io.resource[Task, ActorRef, I] { Task.delay[ActorRef](sub) } { sub ⇒ Task.delay(()) } { sub ⇒ Task.async(cb ⇒ sub ! ReadData[I](cb)) }
   }
 
   def requestor[A, B](actor: ActorRef)(implicit timeout: akka.util.Timeout, tag: ClassTag[B]): scalaz.stream.Channel[Task, A, B] = {
