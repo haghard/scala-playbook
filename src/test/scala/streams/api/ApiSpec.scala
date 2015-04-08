@@ -5,8 +5,7 @@ import org.specs2.mutable.Specification
 import mongo.MongoProgram.NamedThreadFactory
 
 import scala.concurrent.SyncVar
-import scalaz.concurrent.{ Strategy, Task }
-import scalaz.stream.Process._
+import scalaz.concurrent.Task
 import scalaz.stream._
 
 class ApiSpec extends Specification {
