@@ -15,14 +15,13 @@ class ProcessPublisher[T] private (source: Process[Task, T])(implicit ex: Execut
   private val logger = Logger.getLogger("process-pub")
 
   val P = Process
-  private val signal = async.signalOf(0l)(Strategy.Executor(ex))
+  private val signal = async.signalOf(0)(Strategy.Executor(ex))
   private val signalP = signal.discrete
 
   private var subscriber: Option[Subscriber[_ >: T]] = None
 
   private val halter: Cause ⇒ Process[Task, Unit] = {
     case cause @ Cause.End ⇒
-      logger.info("Stream is exhausted")
       subscriber.fold(())(_.onComplete())
       signal.close.run
       Process.Halt(cause)
@@ -48,7 +47,7 @@ class ProcessPublisher[T] private (source: Process[Task, T])(implicit ex: Execut
 
     override def request(l: Long): Unit = {
       require(l > 0, s" $subscriber violated the Reactive Streams rule 3.9 by requesting a non-positive number of elements.")
-      signal.set(l)
+      signal.set(l.toInt)
         .runAsync(_ ⇒ logger.info(s"request: $l"))
     }
   }
@@ -56,7 +55,7 @@ class ProcessPublisher[T] private (source: Process[Task, T])(implicit ex: Execut
   val chunkedSource = streams.io.chunkR(source)
   (for {
     reqSize ← signalP.filter(_ > 0)
-    batch ← chunkedSource.chunk(reqSize.toInt)
+    batch ← chunkedSource.chunk(reqSize)
     r ← P.emitAll(batch).flatMap(i ⇒ P.eval(Task.delay { subscriber.fold(())(_.onNext(i)) }))
   } yield {
     if (batch.size != reqSize.toInt) throw new Exception("IOF")

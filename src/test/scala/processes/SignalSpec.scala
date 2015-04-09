@@ -1,7 +1,6 @@
 package processes
 
 import java.util.concurrent.Executors._
-
 import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
 import mongo.MongoProgram.NamedThreadFactory

@@ -5,12 +5,17 @@ import org.specs2.mutable.Specification
 import mongo.MongoProgram.NamedThreadFactory
 
 import scala.concurrent.SyncVar
+import scala.concurrent.forkjoin.ThreadLocalRandom
 import scalaz.concurrent.Task
 import scalaz.stream._
 
-class ApiSpec extends Specification {
+class ReactiveStreamsSpec extends Specification {
 
-  val range = 1 to 46
+  def naturals = {
+    def go(i: Int): Process[Task, Int] =
+      Process.await(Task.delay(i))(i ⇒ Process.emit(i) ++ go(i + 1))
+    go(0)
+  }
 
   implicit val ex = newFixedThreadPool(4, new NamedThreadFactory("pub-sub"))
 
@@ -18,7 +23,7 @@ class ApiSpec extends Specification {
     "run" in {
       val s = 15
       val sync = new SyncVar[Boolean]()
-      val source: Process[Task, Int] = Process.emitAll(range)
+      val source: Process[Task, Int] = naturals.take(81)
 
       ProcessPublisher[Int](source)
         .subscribe(new ProcessSubscriber[Int](s, sync))
@@ -29,6 +34,7 @@ class ApiSpec extends Specification {
 
   trait CancelableSubscriber[T] extends ProcessSubscriber[T] {
     var i = 0
+
     abstract override def onNext(t: T): Unit = {
       super.onNext(t)
       i += 1
@@ -38,14 +44,30 @@ class ApiSpec extends Specification {
     }
   }
 
+  trait RandomRequestSubscriber[T] extends ProcessSubscriber[T] {
+    override def updateBufferSize = ThreadLocalRandom.current().nextInt(12, 27)
+  }
+
   "Publisher Subscriber with cancel" should {
     "do cancel" in {
       val s = 12
       val sync = new SyncVar[Boolean]()
-      val source: Process[Task, Int] = Process.emitAll(range)
+      val source: Process[Task, Int] = naturals.take(89)
 
       ProcessPublisher[Int](source)
         .subscribe(new ProcessSubscriber[Int](s, sync) with CancelableSubscriber[Int])
+
+      sync.get should be equalTo true
+    }
+  }
+
+  "Publisher Subscriber with different request numbers" should {
+    "run" in {
+      val sync = new SyncVar[Boolean]()
+      val source: Process[Task, Int] = naturals.take(25146)
+
+      ProcessPublisher[Int](source)
+        .subscribe(new ProcessSubscriber[Int](11, sync) with RandomRequestSubscriber[Int])
 
       sync.get should be equalTo true
     }

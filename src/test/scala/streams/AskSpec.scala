@@ -8,7 +8,6 @@ import org.scalatest.{ BeforeAndAfterAll, BeforeAndAfterEach, MustMatchers, Word
 import scala.collection.mutable.Buffer
 import scala.concurrent.SyncVar
 import scalaz.concurrent.Task
-import scalaz.stream._
 
 class AskSpec extends TestKit(ActorSystem("Integration"))
     with WordSpecLike with MustMatchers
@@ -19,7 +18,6 @@ class AskSpec extends TestKit(ActorSystem("Integration"))
   private val logger = Logger.getLogger("integration")
 
   import akka.actor.ActorDSL._
-
   import scala.concurrent.duration._
   import scalaz.stream.Process
 
@@ -56,7 +54,7 @@ class AskSpec extends TestKit(ActorSystem("Integration"))
 
       val results = Buffer.empty[String]
 
-      (Source through ch.akkaChannel[Int, String]() observe (scalaz.stream.io.stdOutLines) to io.fillBuffer(results))
+      (Source through ch.akkaChannel[Int, String]() observe (scalaz.stream.io.stdOutLines) to scalaz.stream.io.fillBuffer(results))
         .onFailure { ex ⇒ println("Error: " + ex.getMessage); P.halt }
         .onComplete(P.eval(Task.delay(println("Complete..."))))
         .runLog.run

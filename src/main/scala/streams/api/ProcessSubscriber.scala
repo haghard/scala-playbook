@@ -15,10 +15,12 @@ class ProcessSubscriber[T](batchSize: Int, sync: SyncVar[Boolean]) extends Subsc
     logger.info(s"onNext: $t")
     bs -= 1
     if (bs == 0) {
-      bs = batchSize
+      bs = updateBufferSize
       subscription.fold(())(_.request(bs))
     }
   }
+
+  protected def updateBufferSize = batchSize
 
   override def onError(throwable: Throwable): Unit = {
     logger.info(s"Error ${throwable.getMessage}")
@@ -27,7 +29,7 @@ class ProcessSubscriber[T](batchSize: Int, sync: SyncVar[Boolean]) extends Subsc
 
   override def onSubscribe(sub: Subscription): Unit = {
     subscription = Some(sub)
-    sub.request(batchSize)
+    sub.request(bs)
   }
 
   override def onComplete(): Unit = {

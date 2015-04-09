@@ -8,6 +8,7 @@ import akka.stream.scaladsl._
 import akka.stream.{ ActorFlowMaterializer, ActorFlowMaterializerSettings }
 import akka.testkit.{ ImplicitSender, TestKit }
 import mongo.MongoProgram.NamedThreadFactory
+import org.scalatest.concurrent.AsyncAssertions.Waiter
 import org.scalatest.{ BeforeAndAfterAll, BeforeAndAfterEach, MustMatchers, WordSpecLike }
 import streams.api.ProcessPublisher
 
@@ -84,7 +85,6 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
    */
   "Scalaz-Stream processes to Akka Source" must {
     "run" in {
-
       def zip2Source[T](f: ActorRef, s: ActorRef): Source[(T, T), Unit] =
         Source() { implicit builder: FlowGraph.Builder ⇒
           import FlowGraph.Implicits._
@@ -94,7 +94,7 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
           zip.out
         }
 
-      val sync = new SyncVar[Boolean]
+      val w = new Waiter
       val odd: Process[Task, Int] = P.emitAll(range).filter(_ % 2 != 0)
       val even: Process[Task, Int] = P.emitAll(range).filter(_ % 2 == 0)
 
@@ -106,8 +106,8 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
 
       val zipSrc = zip2Source(Podd, Peven) map { v ⇒ s"${v._1} - ${v._2}" }
       (zipSrc.toMat(Sink.foreach(x ⇒ println(s"read: $x")))(Keep.right)).run()
-        .onComplete { _ ⇒ sync.put(true) }
-      sync.get
+        .onComplete { _ ⇒ w.dismiss() }
+      w.await()
     }
   }
 
@@ -123,7 +123,7 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
    */
   "Scalaz-Stream process throw Akka Flow" must {
     "run" in {
-      val sync = new SyncVar[Boolean]
+      val w = new Waiter
       val digits: Process[Task, Int] = P.emitAll(range)
       val p = system.actorOf(streams.BatchWriter.props[Int])
       (digits to p.writer[Int]).run.runAsync(_ ⇒ ())
@@ -141,10 +141,10 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
       }.run()
 
       lf zip rf onComplete {
-        case Success(r)  ⇒ sync.put(true)
+        case Success(r)  ⇒ w.dismiss()
         case Failure(ex) ⇒ throw ex
       }
-      sync.get must be === true
+      w.await()
     }
   }
 

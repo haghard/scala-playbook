@@ -134,7 +134,7 @@ package object streams { outer ⇒
   import scala.concurrent._
   implicit val ec = ExecutionContext.fromExecutor(newFixedThreadPool(2, new NamedThreadFactory("future-worker")))
 
-  implicit class FutureOps[+A](f: ⇒ Future[A]) {
+  implicit class FutureSyntax[+A](f: ⇒ Future[A]) {
     def toTask: Task[A] = Task async { cb ⇒
       f.onComplete {
         case Success(v) ⇒ cb(\/-(v))
