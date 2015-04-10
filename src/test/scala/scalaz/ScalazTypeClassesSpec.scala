@@ -1,7 +1,6 @@
 package scalaz
 
 import java.util.concurrent.TimeUnit
-
 import org.specs2.mutable.Specification
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
@@ -26,9 +25,6 @@ object ScalazTypeClassesSpec {
 
 class ScalazTypeClassesSpec extends Specification {
 
-  def plus[F[_], T](ctx: F[T], i: T)(implicit f: Functor[F], num: Numeric[T]): F[T] =
-    f.map(ctx)(num.plus(_, i))
-
   "Equal" should {
     "run" in {
       class Foo(val a: Int, val b: Int)
@@ -47,11 +43,7 @@ class ScalazTypeClassesSpec extends Specification {
 
       import ScalazTypeClassesSpec._
       67.plus(10.some) === Some(77)
-      1.plus(List(7, 2)) === List(6, 1)
-
-      plus(10.some, 6) === Some(16)
-      plus(78.1.some, 12.5) === Some(90.6)
-      plus(List(1, 2, 3, 4), 1) === List(2, 3, 4, 5)
+      1.minis(List(7, 2)) === List(6, 1)
     }
   }
 
@@ -136,7 +128,6 @@ class ScalazTypeClassesSpec extends Specification {
         id ⇒ Future(Address("Baker street"))
 
       import scala.concurrent.Await
-
       Await.result(addressFromUserId[Future](getUserById, gerAddressByUser)(99l),
         new FiniteDuration(1, TimeUnit.SECONDS)) should be equalTo Address("Baker street")
     }
