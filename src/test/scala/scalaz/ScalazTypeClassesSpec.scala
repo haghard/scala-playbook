@@ -142,5 +142,28 @@ class ScalazTypeClassesSpec extends Specification {
       (addressFromUserId[Task](getUserById, gerAddressByUser)(99l))
         .run should be equalTo Address("Baker street")
     }
+
+    /*"abstract Process" in {
+      import scalaz.stream.Process
+
+      val getUserById: Long ⇒ Task[User] =
+        id ⇒ Task.now(User(id, "Sherlock"))
+
+      val gerAddressByUser: User ⇒ Task[Address] =
+        id ⇒ Task.now(Address("Baker street"))
+
+      def monad[I]: Monad[({ type f[x] = Process[I, x]})#f] =
+        new Monad[({ type f[x] = Process[I, x]})#f] {
+
+          override def point[A](a: => A): Process[I, A] =
+            Process.emit(a)
+
+          override def bind[A, B](fa: Process[I, A])(f: (A) => Process[I, B]): Process[I, B] =
+            fa.flatMap f
+        }
+
+      (addressFromUserId[Process](getUserById, gerAddressByUser)(99l))
+        .run should be equalTo Address("Baker street")
+    }*/
   }
 }
