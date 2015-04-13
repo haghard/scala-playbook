@@ -29,12 +29,23 @@ class TreeSpec extends Specification {
   }
 
   "tree" should {
+    "folds" in {
+
+      val b = Branch(
+        Branch(Leaf(1), Branch(Leaf(4), Leaf(8))),
+        Branch(Leaf(3), Leaf(4)))
+
+      foldLeft(b)(0)(_ + _) should be equalTo 20
+      foldRight(b)(0)(_ + _) should be equalTo 20
+    }
+  }
+
+  "tree" should {
     "foldMapTask" in {
       implicit val M0 = monoidT(M)
 
       val m: (Int) ⇒ Int =
         x ⇒ {
-          //simulate job
           Thread.sleep(10)
           x
         }
