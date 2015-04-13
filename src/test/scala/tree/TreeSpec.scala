@@ -18,7 +18,6 @@ class TreeSpec extends Specification {
 
   "tree" should {
     "foldMap" in {
-
       val b = Branch(
         Branch(Leaf(1), Branch(Leaf(4), Leaf(8))),
         Branch(Leaf(3), Leaf(4))
@@ -30,7 +29,6 @@ class TreeSpec extends Specification {
 
   "tree" should {
     "folds" in {
-
       val b = Branch(
         Branch(Leaf(1), Branch(Leaf(4), Leaf(8))),
         Branch(Leaf(3), Leaf(4)))
@@ -51,10 +49,10 @@ class TreeSpec extends Specification {
         }
 
       val b = Branch(
-        Branch(Leaf(1), Branch(Leaf(4), Leaf(8))),
-        Branch(Leaf(3), Leaf(4)))
+        Branch(Leaf(1), Branch(Leaf(1), Leaf(1))),
+        Branch(Leaf(1), Branch(Leaf(1), Branch(Leaf(1), Leaf(1)))))
 
-      foldMapTask(b)(m).run should be equalTo 20
+      foldMapTask(b)(m).run should be equalTo 7
     }
   }
 }
