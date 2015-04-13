@@ -143,27 +143,25 @@ class ScalazTypeClassesSpec extends Specification {
         .run should be equalTo Address("Baker street")
     }
 
-    /*"abstract Process" in {
+    "abstract Process" in {
       import scalaz.stream.Process
+      val P = scalaz.stream.Process
 
-      val getUserById: Long ⇒ Task[User] =
-        id ⇒ Task.now(User(id, "Sherlock"))
+      def addresses = {
+        def go(n: String): Process[Task, Address] =
+          P.await(Task.delay(n))(i ⇒ P.emit(Address(i)) ++ go(i + " !"))
+        go("Baker street")
+      }
 
-      val gerAddressByUser: User ⇒ Task[Address] =
-        id ⇒ Task.now(Address("Baker street"))
+      val getUserById: Long ⇒ Process[Task, User] =
+        id ⇒ P.emit(User(id, "Sherlock"))
 
-      def monad[I]: Monad[({ type f[x] = Process[I, x]})#f] =
-        new Monad[({ type f[x] = Process[I, x]})#f] {
+      val gerAddressByUser: User ⇒ Process[Task, Address] =
+        id ⇒ addresses.take(3)
 
-          override def point[A](a: => A): Process[I, A] =
-            Process.emit(a)
-
-          override def bind[A, B](fa: Process[I, A])(f: (A) => Process[I, B]): Process[I, B] =
-            fa.flatMap f
-        }
-
-      (addressFromUserId[Process](getUserById, gerAddressByUser)(99l))
-        .run should be equalTo Address("Baker street")
-    }*/
+      (addressFromUserId[({ type f[x] = Process[Task, x] })#f](getUserById, gerAddressByUser)(99l))
+        .runLog.run should be equalTo Vector(Address("Baker street"),
+          Address("Baker street !"), Address("Baker street ! !"))
+    }
   }
 }

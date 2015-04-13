@@ -14,7 +14,7 @@ import Scalaz._
 import scala.language.higherKinds
 import scalaz.concurrent.Task
 
-class TreeSpec extends Specification {
+class BTreeSpec extends Specification {
   implicit val M = scalaz.Monoid[Int]
 
   "BTree" should {
@@ -74,14 +74,14 @@ class TreeSpec extends Specification {
       val t = BTree(10)(i.incrementAndGet())
       //BTree.foldMap(t)(m) should be equalTo 523776 // 12 sec
       BTree.foldMap2(Option(t))(m) should be equalTo 523776 // 12 sec
-      BTree.foldMapPar(t)(m).run should be equalTo 523776 //2 sec
+      BTree.foldMapTask(t)(m).run should be equalTo 523776 //2 sec
     }
   }
 
   "BTree" should {
     "mapAsync" in {
       implicit val ec = ExecutionContext.fromExecutor(
-        newFixedThreadPool(3, new NamedThreadFactory("tree-walker")))
+        newFixedThreadPool(3, new NamedThreadFactory("btree-walker")))
 
       val f = (x: Int) ⇒ x * 3
 
@@ -94,39 +94,38 @@ class TreeSpec extends Specification {
       BTree.foldMap(newTree)(identity) should be equalTo f(28)
     }
   }
-}
 
-trait Foldable0[F[_]] {
-  /**
-   *
-   *
-   */
-  def foldMap[T, A](fa: F[T])(f: T ⇒ A)(implicit m: scalaz.Monoid[A]): A
-  /**
-   *
-   *
-   */
-  def foldMap2[T, A](fa: Option[F[T]])(f: T ⇒ A)(implicit m: scalaz.Monoid[A]): A
-  /**
-   *
-   *
-   */
-  def foldMapPar[T, A](fa: BTree[T])(f: T ⇒ A)(implicit m: Monoid[A]): Task[A]
-  /**
-   *
-   *
-   */
-  def foldRight[T, A](fa: F[T])(z: A)(f: (T, A) ⇒ A): A
+  "BTree" should {
+    "manual tree creation" in {
+      import BTree._
+      /*
+        Test Tree structure
+               1
+              / \
+             /   \
+            2     3
+           / \   / \
+          4         20
+           \
+            5
+      */
 
-  /**
-   *
-   *
-   */
-  def foldLeft[T, A](fa: F[T])(z: A)(f: (A, T) ⇒ A): A
+      val t = /\(1,
+        Some(/\(2,
+          Some(/\(4,
+            r = Some(/\(5)))))),
+        Some(/\(3,
+          r = Some(/\(20)))))
+
+      BTree.foldMap2(Option(t))(identity) should be equalTo 35
+    }
+  }
 }
 
 object BTree extends Foldable0[BTree] {
-  private val logger = Logger.getLogger("btree")
+
+  def /\[T](v: T, l: Option[BTree[T]] = None, r: Option[BTree[T]] = None) =
+    new BTree(v, l, r)
 
   def apply[T](levelNumber: Int)(block: ⇒ T): BTree[T] =
     levelNumber match {
@@ -160,6 +159,17 @@ object BTree extends Foldable0[BTree] {
   }
 
   @annotation.tailrec
+  private[BTree] def go2[T, U](tree: Option[BTree[T]], rest: List[Option[BTree[T]]], f: T ⇒ U): Unit = {
+    tree match {
+      case Some(t) ⇒
+        f(t.v) //evaluation
+        go2(t.left, rest.+:(t.right), f)
+      case _ ⇒
+        if (rest != Nil) go2(rest.head, rest.tail, f)
+    }
+  }
+
+  @annotation.tailrec
   private[BTree] def go[T, U](tree: Option[BTree[T]], rest: List[Option[BTree[T]]], f: T ⇒ U): Unit = {
     tree match {
       case Some(t) ⇒
@@ -183,13 +193,12 @@ object BTree extends Foldable0[BTree] {
       loop(tree.left, List(), f, m.append, m.append(m.zero, f(tree.v))))
 
   override def foldMap2[T, A](tree: Option[BTree[T]])(f: T ⇒ A)(implicit m: Monoid[A]): A = tree match {
-    case Some(c) ⇒
-      c.left.fold(m.append(m.zero, f(c.v))) { _ ⇒
-        m.append(f(c.v), m.append(foldMap2(c.left)(f), foldMap2(c.right)(f)))
-      }
+    case None    ⇒ m.zero
+    case Some(c) ⇒ m.append(f(c.v), m.append(foldMap2(c.left)(f), foldMap2(c.right)(f)))
   }
 
-  private[BTree] val st = newFixedThreadPool(8, new NamedThreadFactory("tree-folder"))
+  private[BTree] val executor = newFixedThreadPool(Runtime.getRuntime.availableProcessors(),
+    new NamedThreadFactory("btree-folder"))
 
   private[BTree] implicit def monoidT[A](m: Monoid[A]): Monoid[Task[A]] = new Monoid[Task[A]] {
     private val ND = Nondeterminism[Task]
@@ -198,14 +207,14 @@ object BTree extends Foldable0[BTree] {
 
     override def append(a: Task[A], b: ⇒ Task[A]): Task[A] =
       for {
-        r ← ND.nmap2(Task.fork(a)(st), Task.fork(b)(st)) { (l, r) ⇒
+        r ← ND.nmap2(Task.fork(a)(executor), Task.fork(b)(executor)) { (l, r) ⇒
           //logger.info(s" op($l,$r)")
           m.append(l, r)
         }
       } yield r
   }
 
-  override def foldMapPar[T, B](t: BTree[T])(f: T ⇒ B)(implicit m: Monoid[B]): Task[B] =
+  override def foldMapTask[T, B](t: BTree[T])(f: T ⇒ B)(implicit m: Monoid[B]): Task[B] =
     Task delay (Option(t)) flatMap { tree ⇒
       foldMap2(tree)(element ⇒ Task.delay {
         //Thread.sleep(ThreadLocalRandom.current().nextInt(50, 100));
