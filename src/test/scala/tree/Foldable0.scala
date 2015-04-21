@@ -15,7 +15,7 @@ trait Foldable0[F[_]] {
    *
    *
    */
-  def foldMapTask[T, A](fa: F[T])(f: T ⇒ A)(implicit m: scalaz.Monoid[A]): scalaz.concurrent.Task[A]
+  def foldMapPar[T, A](fa: F[T])(f: T ⇒ A)(implicit m: scalaz.Monoid[A]): scalaz.concurrent.Task[A]
   /**
    *
    *

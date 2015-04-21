@@ -12,14 +12,24 @@ import scalaz.concurrent.Task
 object ScalazTypeClassesSpec {
 
   implicit class NumericAlgebraOps[T](val v: T) extends AnyVal {
-    def plus[F[_]](ctx: F[T])(implicit f: Functor[F], num: Numeric[T]): F[T] =
-      f.map(ctx)(num.plus(_, v))
 
-    def minis[F[_]](ctx: F[T])(implicit f: Functor[F], num: Numeric[T]): F[T] =
-      f.map(ctx)(num.minus(_, v))
+    def plus[F[_]](M: F[T])(implicit f: Functor[F], num: Numeric[T]): F[T] =
+      f.map(M)(num.plus(_, v))
 
-    def multiply[F[_]](ctx: F[T])(implicit f: Functor[F], num: Numeric[T]): F[T] =
-      f.map(ctx)(num.times(_, v))
+    def minis[F[_]](M: F[T])(implicit f: Functor[F], num: Numeric[T]): F[T] =
+      f.map(M)(num.minus(_, v))
+
+    def multiply[F[_]](M: F[T])(implicit f: Functor[F], num: Numeric[T]): F[T] =
+      f.map(M)(num.times(_, v))
+
+    def plusM[F[_]: Monad](M: F[T])(implicit num: Numeric[T]): F[T] =
+      M.map(num.plus(_, v))
+
+    def minisM[F[_]: Monad](M: F[T])(implicit num: Numeric[T]): F[T] =
+      M.map(num.minus(_, v))
+
+    def multiplyM[F[_]: Monad](M: F[T])(implicit num: Numeric[T]): F[T] =
+      M.map(num.times(_, v))
   }
 }
 
@@ -39,11 +49,15 @@ class ScalazTypeClassesSpec extends Specification {
 
   "Functor" should {
     "run" in {
+      import ScalazTypeClassesSpec._
+
       "hello".some.map(_.length).get === 5
 
-      import ScalazTypeClassesSpec._
       67.plus(10.some) === Some(77)
       1.minis(List(7, 2)) === List(6, 1)
+
+      67.plusM(10.some) === Some(77)
+      1.minisM(List(7, 2)) === List(6, 1)
     }
   }
 
@@ -91,77 +105,6 @@ class ScalazTypeClassesSpec extends Specification {
       val M = Monad[Option]
       def func(m: Int): Option[Int] = Some(m * 5)
       (M.point(12) >>= func) should be equalTo Some(60)
-    }
-
-    case class User(id: Long, name: String)
-    case class Address(street: String)
-
-    def addressFromUserId[M[_]: Monad](getUserById: Long ⇒ M[User],
-                                       getAddressByUser: User ⇒ M[Address])(id: Long): M[Address] = {
-      for {
-        user ← getUserById(id)
-        address ← getAddressByUser(user)
-      } yield address
-    }
-
-    "abstract result aspect effect with Option" in {
-      (addressFromUserId[Option](
-        { id ⇒ Some(User(id, "Sherlock")) },
-        { user ⇒ Some(Address("Baker street")) })(99l)) should be equalTo Some(Address("Baker street"))
-    }
-
-    "abstract result aspect effect with Id" in {
-      val getUserById: Long ⇒ Id[User] =
-        id ⇒ User(id, "Sherlock")
-
-      val gerAddressByUser: User ⇒ Id[Address] =
-        id ⇒ Address("Baker street")
-
-      addressFromUserId[Id](getUserById, gerAddressByUser)(99l) should be equalTo Address("Baker street")
-    }
-
-    "abstract latency effect with Future" in {
-      val getUserById: Long ⇒ Future[User] =
-        id ⇒ Future(User(id, "Sherlock"))
-
-      val gerAddressByUser: User ⇒ Future[Address] =
-        id ⇒ Future(Address("Baker street"))
-
-      import scala.concurrent.Await
-      Await.result(addressFromUserId[Future](getUserById, gerAddressByUser)(99l),
-        new FiniteDuration(1, TimeUnit.SECONDS)) should be equalTo Address("Baker street")
-    }
-
-    "abstract latency effect context Task" in {
-      val getUserById: Long ⇒ Task[User] =
-        id ⇒ Task.now(User(id, "Sherlock"))
-
-      val gerAddressByUser: User ⇒ Task[Address] =
-        id ⇒ Task.now(Address("Baker street"))
-
-      (addressFromUserId[Task](getUserById, gerAddressByUser)(99l))
-        .run should be equalTo Address("Baker street")
-    }
-
-    "abstract Process" in {
-      import scalaz.stream.Process
-      val P = scalaz.stream.Process
-
-      def addresses = {
-        def go(n: String): Process[Task, Address] =
-          P.await(Task.delay(n))(i ⇒ P.emit(Address(i)) ++ go(i + " !"))
-        go("Baker street")
-      }
-
-      val getUserById: Long ⇒ Process[Task, User] =
-        id ⇒ P.emit(User(id, "Sherlock"))
-
-      val gerAddressByUser: User ⇒ Process[Task, Address] =
-        id ⇒ addresses.take(3)
-
-      (addressFromUserId[({ type f[x] = Process[Task, x] })#f](getUserById, gerAddressByUser)(99l))
-        .runLog.run should be equalTo Vector(Address("Baker street"),
-          Address("Baker street !"), Address("Baker street ! !"))
     }
   }
 }

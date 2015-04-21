@@ -74,7 +74,7 @@ class BTreeSpec extends Specification {
       val t = BTree(10)(i.incrementAndGet())
       //BTree.foldMap(t)(m) should be equalTo 523776 // 12 sec
       BTree.foldMap2(Option(t))(m) should be equalTo 523776 // 12 sec
-      BTree.foldMapTask(t)(m).run should be equalTo 523776 //2 sec
+      BTree.foldMapPar(t)(m).run should be equalTo 523776 //2 sec
     }
   }
 
@@ -214,7 +214,7 @@ object BTree extends Foldable0[BTree] {
       } yield r
   }
 
-  override def foldMapTask[T, B](t: BTree[T])(f: T ⇒ B)(implicit m: Monoid[B]): Task[B] =
+  override def foldMapPar[T, B](t: BTree[T])(f: T ⇒ B)(implicit m: Monoid[B]): Task[B] =
     Task delay (Option(t)) flatMap { tree ⇒
       foldMap2(tree)(element ⇒ Task.delay {
         //Thread.sleep(ThreadLocalRandom.current().nextInt(50, 100));

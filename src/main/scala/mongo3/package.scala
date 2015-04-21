@@ -78,14 +78,15 @@ package object mongo3 {
     private val logger = Logger.getLogger(classOf[ProgramOps])
 
     def transM[M[_]: Monad: SideEffects](implicit ex: ExecutorService): Kleisli[M, MongoClient, A] =
-      runFC[MongoIO, ({ type f[x] = Kleisli[M, MongoClient, x] })#f, A](q)(kleisliTrans[M])
+      runFC[MongoIO, ({ type λ[x] = Kleisli[M, MongoClient, x] })#λ, A](q)(kleisliTrans[M])
 
-    private def kleisliTrans[M[_]: Monad: SideEffects](implicit ex: ExecutorService): MongoIO ~> ({ type f[x] = Kleisli[M, MongoClient, x] })#f =
-      new (MongoIO ~>({ type f[x] = Kleisli[M, MongoClient, x] })#f) {
-        private val targetMonad = implicitly[SideEffects[M]].withExecutor(ex)
+    private def kleisliTrans[M[_]: Monad: SideEffects](implicit ex: ExecutorService): MongoIO ~> ({ type λ[x] = Kleisli[M, MongoClient, x] })#λ =
+      new (MongoIO ~>({ type λ[x] = Kleisli[M, MongoClient, x] })#λ) {
+        import Kleisli._
+        private val transMonad = implicitly[SideEffects[M]].withExecutor(ex)
 
         private def toKleisli[A](f: MongoClient ⇒ A): Kleisli[M, MongoClient, A] =
-          Kleisli.kleisli { s ⇒ targetMonad(f(s)) }
+          kleisli { s ⇒ transMonad(f(s)) }
 
         override def apply[A](fa: MongoIO[A]): Kleisli[M, MongoClient, A] = fa match {
           case FindOne(db, c, q) ⇒ toKleisli {
@@ -93,16 +94,16 @@ package object mongo3 {
               {
                 val coll = client.getDB(db).getCollection(c)
                 val r = coll.findOne(q)
-                logger.info(s"FIND-ONE: $r")
+                logger.info(s"Find-one: $r")
                 new BasicDBObject("rs", r).asInstanceOf[A]
               }
           }
-          case Find(db, c, q) ⇒ Kleisli.kleisli(targetMonad.withResource(_, db, c, q))
+          case Find(db, c, q) ⇒ kleisli(transMonad.withResource(_, db, c, q))
           case Insert(db, c, insert) ⇒ toKleisli { client ⇒
             Try {
               val coll = client.getDB(db).getCollection(c)
               coll.insert(WriteConcern.ACKNOWLEDGED, insert)
-              logger.info(s"INSERT: $insert")
+              logger.info(s"Insert: $insert")
               insert
             } match {
               case Success(obj)   ⇒ obj.asInstanceOf[A]
@@ -116,13 +117,13 @@ package object mongo3 {
   trait ProgramOps {
     def dbName: String
 
-    def find(query: DBObject)(implicit collection: String) =
+    def find(query: DBObject)(implicit collection: String): FreeMongoIO[DBObject] =
       Free.liftFC[MongoIO, DBObject](Find(dbName, collection, query))
 
-    def findOne(query: DBObject)(implicit collection: String) =
+    def findOne(query: DBObject)(implicit collection: String): FreeMongoIO[DBObject] =
       Free.liftFC[MongoIO, DBObject](FindOne(dbName, collection, query))
 
-    def insert(insertObj: DBObject)(implicit collection: String) =
+    def insert(insertObj: DBObject)(implicit collection: String): FreeMongoIO[DBObject] =
       Free.liftFC[MongoIO, DBObject](Insert(dbName, collection, insertObj))
   }
 

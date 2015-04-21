@@ -4,7 +4,6 @@ import sbt._
 import com.typesafe.sbt.SbtScalariform.ScalariformKeys
 import scalariform.formatter.preferences._
 
-
 scalariformSettings
 
 ScalariformKeys.preferences := ScalariformKeys.preferences.value
@@ -51,7 +50,9 @@ libraryDependencies ++= Seq(
     "org.tpolecat"   %% "doobie-contrib-specs2"     % Doobie,
     "org.tpolecat"   %% "doobie-contrib-h2"         % Doobie,
     "org.scodec"     %% "scodec-bits"               % "1.0.6",
-    "log4j"               %  "log4j"               %  "1.2.14")
+    "log4j"               %  "log4j"               %  "1.2.14",
+    "org.reactivestreams" % "reactive-streams-tck"  % "1.0.0.RC5" % "test"
+)
 
 
 libraryDependencies ++= Seq(

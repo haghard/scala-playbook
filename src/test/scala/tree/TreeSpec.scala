@@ -52,7 +52,7 @@ class TreeSpec extends Specification {
         Branch(Leaf(1), Branch(Leaf(1), Leaf(1))),
         Branch(Leaf(1), Branch(Leaf(1), Branch(Leaf(1), Leaf(1)))))
 
-      foldMapTask(b)(m).run should be equalTo 7
+      foldMapPar(b)(m).run should be equalTo 7
     }
   }
 }
@@ -80,7 +80,7 @@ object TreeF extends Foldable0[Tree] {
     case Branch(l, r) ⇒ foldRight(l)(foldRight(r)(z)(f))(f)
   }
 
-  override def foldMapTask[A, B](fa: Tree[A])(f: (A) ⇒ B)(implicit m: Monoid[B]): Task[B] = {
+  override def foldMapPar[A, B](fa: Tree[A])(f: (A) ⇒ B)(implicit m: Monoid[B]): Task[B] = {
     Task delay (fa) flatMap { tree ⇒
       foldMap(tree)(element ⇒ Task.delay {
         f(element)
