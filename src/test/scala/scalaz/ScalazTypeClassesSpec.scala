@@ -1,13 +1,9 @@
 package scalaz
 
-import java.util.concurrent.TimeUnit
-import org.specs2.mutable.Specification
-import scala.concurrent.Future
-import scala.concurrent.duration.FiniteDuration
 import scalaz._
 import Scalaz._
 import scala.language.higherKinds
-import scalaz.concurrent.Task
+import org.specs2.mutable.Specification
 
 object ScalazTypeClassesSpec {
 
@@ -101,10 +97,24 @@ class ScalazTypeClassesSpec extends Specification {
   }
 
   "Monad" should {
+
     "bind" in {
       val M = Monad[Option]
       def func(m: Int): Option[Int] = Some(m * 5)
       (M.point(12) >>= func) should be equalTo Some(60)
+    }
+
+    "state traverseU" in {
+      val src = List(1, 2, 4, 5)
+      src.traverseU(x ⇒ scalaz.State { y: Int ⇒
+        (y + x, x)
+      }).run(0)._1 should be equalTo 12
+    }
+
+    "state traverseS" in {
+      val src = List(1, 2, 4, 5)
+      src.traverseS(x ⇒ scalaz.State { y: Int ⇒ (y + x, x) })
+        .run(0)._1 should be equalTo 12
     }
   }
 }
