@@ -1,4 +1,5 @@
 package tree
+import scala.language.higherKinds
 
 trait Foldable0[F[_]] {
   /**

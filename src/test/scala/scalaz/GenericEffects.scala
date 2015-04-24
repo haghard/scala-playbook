@@ -41,8 +41,8 @@ class GenericEffects extends Specification {
 
   "Success/Error value effect with Disjunction" in {
     (fetch[({ type λ[x] = String \/ x })#λ](
-      { id ⇒ -\/(s"User lookup error $id") },
-      { user ⇒ \/-(Address("Baker street")) })(99l)) should be equalTo -\/("User lookup error 99")
+      { id ⇒ \/-(User(id, "Sherlock")) },
+      { user ⇒ -\/(s"Can't find street for user ${user.id}") })(99l)) should be equalTo -\/("Can't find street for user 99")
   }
 
   "Latency effect with Future" in {

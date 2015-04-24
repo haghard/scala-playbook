@@ -20,8 +20,8 @@ version := "0.0.1-SNAPSHOT"
 
 scalaVersion := "2.11.6"
 
-val Akka = "2.3.9"
-val Doobie = "0.2.1"
+val Akka = "2.3.10"
+val Doobie = "0.2.2-SNAPSHOT"
 
 parallelExecution in Test := false
 
@@ -35,9 +35,18 @@ resolvers += "haghard-bintray"    at "http://dl.bintray.com/haghard/releases"
 
 resolvers += "tpolecat" at "http://dl.bintray.com/tpolecat/maven"
 
+resolvers += "RichRelevance Bintray" at "http://dl.bintray.com/rr/releases"
+
 libraryDependencies ++= Seq(
-    "org.scalaz"          %% "scalaz-core"         %  "7.1.0"   withSources(),
-    "org.scalaz"          %% "scalaz-concurrent"   %  "7.1.0"   withSources(),
+  "org.tpolecat"   %% "doobie-core"               % Doobie,
+  "org.tpolecat"   %% "doobie-contrib-postgresql" % Doobie,
+  "org.tpolecat"   %% "doobie-contrib-specs2"     % Doobie,
+  "org.tpolecat"   %% "doobie-contrib-h2"         % Doobie
+)
+
+libraryDependencies ++= Seq(
+    //"org.scalaz"          %% "scalaz-core"         %  "7.1.0"   withSources(),
+    //"org.scalaz"          %% "scalaz-concurrent"   %  "7.1.0"   withSources(),
     "org.mongodb"         %  "mongo-java-driver"   %  "2.13.0"  withSources(),
     "org.scalaz.stream"   %% "scalaz-stream"       %  "0.7a"    withSources(),
     "com.typesafe.akka"   %% "akka-actor"          %  Akka      withSources(),
@@ -45,26 +54,21 @@ libraryDependencies ++= Seq(
     "com.typesafe.akka"   %% "akka-stream-experimental" % "1.0-M5",
     //"org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5.1" exclude ("org.specs2", "*"),
     //"net.fehmicansaglam"  %% "tepkin"              %  "0.2-SNAPSHOT",
-    "org.tpolecat"   %% "doobie-core"               % Doobie,
-    "org.tpolecat"   %% "doobie-contrib-postgresql" % Doobie,
-    "org.tpolecat"   %% "doobie-contrib-specs2"     % Doobie,
-    "org.tpolecat"   %% "doobie-contrib-h2"         % Doobie,
-    "org.scodec"     %% "scodec-bits"               % "1.0.6",
-    "log4j"               %  "log4j"               %  "1.2.14",
-    "org.reactivestreams" % "reactive-streams-tck"  % "1.0.0.RC5" % "test"
+    "log4j"               %  "log4j"                % "1.2.14"
+    //"org.scalaz.netty"    %% "scalaz-netty"         % "0.1.8"
 )
 
 
 libraryDependencies ++= Seq(
-  "de.bwaldvogel"       %   "mongo-java-server"   %   "1.2.0",
-  "org.scalatest"       %%  "scalatest"           %   "2.2.0"   %   "test",
-  "org.specs2"          %%  "specs2"              %   "2.4.15"  %   "test"
+  "de.bwaldvogel"       %   "mongo-java-server"     %   "1.2.0",
+  "org.scalatest"       %%  "scalatest"             %   "2.2.0"     %   "test",
+  "org.specs2"          %%  "specs2"                %   "2.4.15"    %   "test",
+  "org.reactivestreams" %   "reactive-streams-tck"  %   "1.0.0.RC5" %   "test"
 )
-
 
 scalacOptions ++= Seq(
   "-encoding", "UTF-8",
-  "-target:jvm-1.7",
+  "-target:jvm-1.8",
   "-deprecation",
   "-unchecked",
   "-Ywarn-dead-code",
@@ -74,9 +78,9 @@ scalacOptions ++= Seq(
   "-language:existentials")
 
 javacOptions ++= Seq(
-  "-source", "1.7",
-  "-target", "1.7",
+  "-source", "1.8",
+  "-target", "1.8",
   "-Xlint:unchecked",
   "-Xlint:deprecation")
 
-javaOptions ++= Seq("-Xms226m", "-Xmx756m")
+//javaOptions in test ++= Seq("-Xmx1576m", "-XX:MaxMetaspaceSize=512m")

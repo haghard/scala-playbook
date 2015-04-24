@@ -12,7 +12,7 @@ import scalaz._
 import scalaz.concurrent.Task
 import scalaz.effect.IO
 
-trait Env extends org.specs2.mutable.Before {
+trait Environment extends org.specs2.mutable.Before {
 
   override def before = {
     val xa = doobie.util.transactor.DriverManagerTransactor[Task](
@@ -29,6 +29,8 @@ trait Env extends org.specs2.mutable.Before {
 }
 
 class DoobieSpec extends Specification with Mockito {
+  case class Country(code: String, name: String, population: Int)
+
   "Doobie" should {
     "run the simplest program" in {
       val xa = doobie.util.transactor.DriverManagerTransactor[Task](
@@ -43,7 +45,7 @@ class DoobieSpec extends Specification with Mockito {
     }
   }
 
-  "Doobie program using existing Connection with Task effect" in new Env {
+  "Doobie program using existing Connection with Task effect" in new Environment {
     val task: Kleisli[Task, java.sql.Connection, Int] =
       sql"SELECT count(*) FROM country"
         .query[Int]
@@ -56,7 +58,7 @@ class DoobieSpec extends Specification with Mockito {
     task.run(con).attemptRun should be equalTo \/-(2)
   }
 
-  "Doobie program using existing Connection with IO effect" in new Env {
+  "Doobie program using existing Connection with IO effect" in new Environment {
     val task: Kleisli[IO, java.sql.Connection, Int] =
       sql"SELECT count(*) FROM country"
         .query[Int]
@@ -69,14 +71,14 @@ class DoobieSpec extends Specification with Mockito {
     task.run(con).unsafePerformIO() should be equalTo 2
   }
 
-  "Doobie program using existing DataSource" in new Env {
+  "Doobie program using existing DataSource" in new Environment {
     val ds: javax.sql.DataSource = null
     val xa = DataSourceTransactor.apply[Task](ds)
 
     val q = sql"SELECT count(*) FROM country".query[Int].unique
 
     val p: Task[Int] = for {
-      _ ← xa.configure(ds ⇒ Task.delay( /* do something with ds */ ()))
+      _ ← xa.configure(ds ⇒ Task.delay( /* ds.getConnection ..... */ ()))
       a ← q.transact(xa)
     } yield a
   }
@@ -99,15 +101,12 @@ class DoobieSpec extends Specification with Mockito {
     }
   }
 
-  case class Country(code: String, name: String, population: Int)
   val list = List(Country("RUS", "Russia", 146270), Country("USA", "United States of America", 320480))
 
-  /*
-  Wait for update in scalaz-stream 0.7a
-  "Doobie h2 in memory db streaming thought process" in new Env {
+  "Doobie h2 in memory db streaming thought process" in new Environment {
     val xa = doobie.util.transactor.DriverManagerTransactor[Task](
       "org.h2.Driver",
-      "jdbc:h2:mem:test-db;DB_CLOSE_DELAY=-1",
+      "jdbc:h2:mem:test-db0;DB_CLOSE_DELAY=-1",
       "sa", "")
 
     val p = sql"SELECT * FROM country"
@@ -116,9 +115,9 @@ class DoobieSpec extends Specification with Mockito {
       .transact(xa)
 
     p.runLog.run should be equalTo list.toIndexedSeq
-  }*/
+  }
 
-  "Doobie run H2Transactor uses backed JdbcConnectionPool" in new Env {
+  "Doobie run H2Transactor uses backed JdbcConnectionPool" in new Environment {
     import doobie.imports._, scalaz._, scalaz.concurrent.Task
     import doobie.contrib.h2.h2transactor._
 
@@ -131,4 +130,5 @@ class DoobieSpec extends Specification with Mockito {
       a ← q.transact(xa).ensuring(xa.dispose)
     } yield a).attemptRun should be equalTo \/-(list)
   }
+
 }
