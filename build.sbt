@@ -29,6 +29,8 @@ net.virtualvoid.sbt.graph.Plugin.graphSettings
 
 resolvers += "Sonatype snapshots" at "http://oss.sonatype.org/content/repositories/snapshots/"
 
+resolvers += "Sonatype" at "https://oss.sonatype.org/content/groups/public/"
+
 resolvers += "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases"
 
 resolvers += "haghard-bintray"    at "http://dl.bintray.com/haghard/releases"
@@ -36,13 +38,6 @@ resolvers += "haghard-bintray"    at "http://dl.bintray.com/haghard/releases"
 resolvers += "tpolecat" at "http://dl.bintray.com/tpolecat/maven"
 
 resolvers += "RichRelevance Bintray" at "http://dl.bintray.com/rr/releases"
-
-libraryDependencies ++= Seq(
-  "org.tpolecat"   %% "doobie-core"               % Doobie,
-  "org.tpolecat"   %% "doobie-contrib-postgresql" % Doobie,
-  "org.tpolecat"   %% "doobie-contrib-specs2"     % Doobie,
-  "org.tpolecat"   %% "doobie-contrib-h2"         % Doobie
-)
 
 libraryDependencies ++= Seq(
     //"org.scalaz"          %% "scalaz-core"         %  "7.1.0"   withSources(),
@@ -54,8 +49,9 @@ libraryDependencies ++= Seq(
     "com.typesafe.akka"   %% "akka-stream-experimental" % "1.0-M5",
     //"org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5.1" exclude ("org.specs2", "*"),
     //"net.fehmicansaglam"  %% "tepkin"              %  "0.2-SNAPSHOT",
-    "log4j"               %  "log4j"                % "1.2.14"
-    //"org.scalaz.netty"    %% "scalaz-netty"         % "0.1.8"
+    "log4j"               %  "log4j"                % "1.2.14",
+    "org.scalaz.netty"    %% "scalaz-netty"         % "0.1.8",
+    "org.scodec"   %% "scodec-stream"        % "0.9.0"
 )
 
 
@@ -68,7 +64,7 @@ libraryDependencies ++= Seq(
 
 scalacOptions ++= Seq(
   "-encoding", "UTF-8",
-  "-target:jvm-1.8",
+  "-target:jvm-1.7",
   "-deprecation",
   "-unchecked",
   "-Ywarn-dead-code",
@@ -78,9 +74,7 @@ scalacOptions ++= Seq(
   "-language:existentials")
 
 javacOptions ++= Seq(
-  "-source", "1.8",
-  "-target", "1.8",
+  "-source", "1.7",
+  "-target", "1.7",
   "-Xlint:unchecked",
   "-Xlint:deprecation")
-
-//javaOptions in test ++= Seq("-Xmx1576m", "-XX:MaxMetaspaceSize=512m")
