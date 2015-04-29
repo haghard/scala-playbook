@@ -1,7 +1,9 @@
 package netty
 
 import java.net.InetSocketAddress
+import java.util.concurrent.Executors._
 import java.util.concurrent.{ Executors, ThreadFactory, TimeUnit }
+import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
 import org.specs2.mutable._
 import scodec.bits.ByteVector
@@ -42,6 +44,8 @@ class ScalazNettySpec extends Specification with ScalazNettyConfig {
 
   val message = "Alice"
   val address = new InetSocketAddress("localhost", 9091)
+  val E = newFixedThreadPool(5, new NamedThreadFactory("netty-worker2"))
+  val S = Strategy.Executor(E)
 
   "Server for multi clients" should {
     "single req response echo server" in {
@@ -56,14 +60,14 @@ class ScalazNettySpec extends Specification with ScalazNettyConfig {
         greeting ++ bytes
       }
 
-      val EchoGreetingServer = merge.mergeN(Netty.server(address).map { v ⇒
+      val EchoGreetingServer = merge.mergeN(Netty.server(address)(E) map { v ⇒
         val addr = v._1
         val exchange = v._2
         for {
           _ ← Process.eval(Task.delay(logger.info(s"Accepted connection from $addr")))
           batch ← exchange.read.map(serverLogic) to exchange.write
         } yield ()
-      })
+      })(S)
 
       EchoGreetingServer.run.runAsync(_ ⇒ ())
 

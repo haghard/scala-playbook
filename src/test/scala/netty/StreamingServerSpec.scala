@@ -2,25 +2,30 @@ package netty
 
 import java.net.InetSocketAddress
 import java.util.Date
+import java.util.concurrent.Executors._
 import java.util.concurrent.TimeUnit
 
+import mongo.MongoProgram.NamedThreadFactory
 import org.specs2.mutable.Specification
 import scodec.bits.ByteVector
 
 import scala.concurrent.duration.FiniteDuration
 import scalaz.Nondeterminism
-import scalaz.concurrent.Task
+import scalaz.concurrent.{ Strategy, Task }
 import scalaz.netty.Netty
 import scalaz.stream._
 
 class StreamingServerSpec extends Specification with ScalazNettyConfig {
-  val n = 10
+  val n = 15
   val address = new InetSocketAddress("localhost", 9092)
+
+  val E = newFixedThreadPool(5, new NamedThreadFactory("netty-worker2"))
+  val S = Strategy.Executor(E)
 
   "Streaming with period the same content" should {
     "run" in {
 
-      val topic = async.topic[ByteVector]()
+      val topic = async.topic[ByteVector]()(S)
       val period = new FiniteDuration(1, TimeUnit.SECONDS)
 
       (time.awakeEvery(period).zip(P.range(0, n)))
@@ -58,7 +63,7 @@ class StreamingServerSpec extends Specification with ScalazNettyConfig {
       }
 
       //Server for 2 parallel at most clients
-      scalaz.stream.merge.mergeN(2)(Netty.server(address).map { v ⇒
+      scalaz.stream.merge.mergeN(2)(Netty.server(address)(E).map { v ⇒
         val addr = v._1
         val exchange = v._2
         (for {
@@ -68,7 +73,7 @@ class StreamingServerSpec extends Specification with ScalazNettyConfig {
           out = topic.subscribe to exchange.write
           _ ← in merge out
         } yield ()) onHalt errorHandler
-      }).onComplete(P.eval(cleanup)).runLog.runAsync(_ ⇒ ())
+      })(S).onComplete(P.eval(cleanup)).runLog.runAsync(_ ⇒ ())
 
       def client(id: Long, n0: Int) = Netty connect address flatMap { exchange ⇒
         (for {
