@@ -50,7 +50,7 @@ libraryDependencies ++= Seq(
     //"org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5.1" exclude ("org.specs2", "*"),
     //"net.fehmicansaglam"  %% "tepkin"              %  "0.2-SNAPSHOT",
     "log4j"               %  "log4j"                % "1.2.14",
-    "org.scalaz.netty"    %% "scalaz-netty"         % "0.1.8",
+    "org.scalaz.netty"    %% "scalaz-netty"         % "0.2.0", //version from my fork and locally builded
     "org.scodec"   %% "scodec-stream"        % "0.9.0"
 )
 
