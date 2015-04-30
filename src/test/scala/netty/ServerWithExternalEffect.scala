@@ -17,7 +17,7 @@ import scalaz.stream._
 //request processing threads = netty-worker(default 4) + netty-worker2 + external-worker
 class ServerWithExternalEffect extends Specification with ScalazNettyConfig {
 
-  val address = new InetSocketAddress("localhost", 9093)
+  override val address = new InetSocketAddress("localhost", 9093)
 
   "Batching client and external effects server" should {
     "run" in {

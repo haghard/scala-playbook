@@ -17,7 +17,7 @@ import scalaz.stream._
 
 class StreamingServerSpec extends Specification with ScalazNettyConfig {
   val n = 15
-  val address = new InetSocketAddress("localhost", 9092)
+  override val address = new InetSocketAddress("localhost", 9092)
 
   val E = newFixedThreadPool(5, new NamedThreadFactory("netty-worker2"))
   val S = Strategy.Executor(E)
