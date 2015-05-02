@@ -8,35 +8,20 @@ import org.specs2.mutable.Specification
 import scodec.bits.ByteVector
 
 import scala.collection.mutable.Buffer
-import scalaz.Monoid
-import scalaz.concurrent.{Strategy, Task}
+import scalaz.concurrent.{ Strategy, Task }
 import scalaz.netty.Netty
+import scalaz.stream.Process._
 import scalaz.stream._
-
-
-/*
-It works too, but kind of too static....
-def zipWithN[I, I2]: Tee[I, I2, I2] = {
-  for {
-    _ ← awaitL[I]
-    _ ← awaitL[I]
-    _ ← awaitL[I]
-    _ ← awaitL[I]
-    _ ← awaitL[I]
-    r0 ← awaitR[I2]
-    r ← emit(r0)
-  } yield r
-} repeat
-*/
+import process1._
 
 class ScalazNettyRequestNResponse1Spec extends Specification with ScalazNettyConfig {
 
   override val address = new InetSocketAddress("localhost", 9095)
 
   "Request(N) aggregated response server/client" should {
-    "run" in {
-      val batchSize = 10
-      val iterationN = 5
+    "run with tee" in {
+      val batchSize = 5
+      val iterationN = 10
       val S = newFixedThreadPool(2, new NamedThreadFactory("netty-worker2"))
       val C = newFixedThreadPool(1, new NamedThreadFactory("netty-client"))
 
@@ -53,30 +38,42 @@ class ScalazNettyRequestNResponse1Spec extends Specification with ScalazNettyCon
         for {
           _ ← Process.eval(Task.delay(logger.info(s"Connection had accepted from ${v._1}")))
           Exchange(src, sink) = v._2
-          _ ← (src |> process1.chunk(batchSize)).map(reduceServer) to (sink)
+          _ ← src chunk batchSize map reduceServer to sink
         } yield ()
       })(Strategy.Executor(S))
 
       EchoGreetingServer.run.runAsync(_ ⇒ ())
 
-      val bWye = wye.dynamic(
+      /*val bWye = wye.dynamic(
         (x: (Unit, Long)) ⇒ if (x._2 % batchSize == 0) { wye.Request.R } else { wye.Request.L },
         (y: Unit) ⇒ wye.Request.L
-      )
+      )*/
+
+      /*
+      * It is tee reading `n` elements from the left, then one element from right
+      */
+      def zipN[I, I2](n: Int) = {
+        def go(n: Int, limit: Int): Tee[I, I2, Any] = {
+          if (n > 0) awaitL[I] ++ go(n - 1, limit)
+          else awaitR[I2] ++ go(limit, limit)
+        }
+        go(n, n)
+      }
 
       def client(mes: String, buf: Buffer[String]) = {
-        val clientStream: Process[Task, ByteVector] =
-          (P.emitAll(Seq.fill(batchSize * iterationN)(mes) ++ Seq.fill(batchSize)(PoisonPill)) |> enc0.encoder).map(_.toByteVector)
+        val n = 10 * batchSize
+        val poison = (P.emitAll(Seq.fill(batchSize)(PoisonPill)) |> enc0.encoder) map (_.toByteVector)
 
         for {
           exchange ← Netty.connect(address)(C)
           Exchange(src, sink) = transcode(exchange)
 
-          out = clientStream |> process1.lift { b ⇒ logger.info(s"send $mes"); b } to sink
+          out = ((clientStream(mes) take n) ++ poison) |> lift { b ⇒ logger.info(s"send $mes"); b } to sink
           in = src observe (LoggerS) to io.fillBuffer(buf)
 
-          _ ← ((out zip nats).wye(in)(bWye)(Strategy.Executor(C)))
-            .take((batchSize + 1) * iterationN + batchSize)// for correct exit
+          _ ← (out tee in)(zipN(batchSize))
+            //_ ← ((out zip nats).wye(in)(bWye)(Strategy.Executor(C)))
+            .take((batchSize + 1) * iterationN + batchSize) // for correct client exit
         } yield ()
       }
 

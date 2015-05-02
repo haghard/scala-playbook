@@ -12,7 +12,6 @@ import scalaz.stream.Process._
 import scalaz.stream._
 import scalaz.syntax.monad._
 import scodec.Codec
-import scodec.codecs.implicits._
 import scalaz.concurrent.{ Strategy, Task }
 import scalaz.netty._
 import collection.mutable.Buffer
@@ -65,6 +64,14 @@ trait ScalazNettyConfig {
       Process.await(Task.delay(i))(i ⇒ Process.emit(i) ++ go(i + 1))
     go(1l)
   }
+
+  def clientStream(mes: String): Process[Task, ByteVector] = {
+    def go(mes: String): Process[Task, String] =
+      P.await(Task.delay(mes))(m ⇒ P.emit(mes) ++ go(mes))
+
+    (go(mes) |> enc0.encoder) map (_.toByteVector)
+  }
+
 }
 
 class ScalazNettyRequestResponseSpec extends Specification with ScalazNettyConfig {
