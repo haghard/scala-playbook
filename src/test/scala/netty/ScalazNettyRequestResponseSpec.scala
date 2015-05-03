@@ -2,6 +2,7 @@ package netty
 
 import java.net.InetSocketAddress
 import java.util.concurrent.Executors._
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{ Executors, ThreadFactory }
 import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
@@ -59,17 +60,16 @@ trait ScalazNettyConfig {
 
   val PoisonPill = "Poison"
 
-  def nats = {
-    def go(i: Long): Process[Task, Long] =
-      Process.await(Task.delay(i))(i ⇒ Process.emit(i) ++ go(i + 1))
-    go(1l)
-  }
-
-  def clientStream(mes: String): Process[Task, ByteVector] = {
+  def requestSrc(mes: String): Process[Task, ByteVector] = {
     def go(mes: String): Process[Task, String] =
       P.await(Task.delay(mes))(m ⇒ P.emit(mes) ++ go(mes))
 
     (go(mes) |> enc0.encoder) map (_.toByteVector)
+  }
+
+  def namedThreadFactory(name: String) = new ThreadFactory {
+    val num = new AtomicInteger(1)
+    def newThread(runnable: Runnable) = new Thread(runnable, s"$name - ${num.incrementAndGet}")
   }
 
 }
@@ -82,8 +82,8 @@ class ScalazNettyRequestResponseSpec extends Specification with ScalazNettyConfi
     "run echo" in {
       val n = 5
 
-      val S = newFixedThreadPool(4, new NamedThreadFactory("netty-worker2"))
-      val C = newFixedThreadPool(2, new NamedThreadFactory("netty-client"))
+      val S = newFixedThreadPool(4, namedThreadFactory("netty-worker2"))
+      val C = newFixedThreadPool(2, namedThreadFactory("netty-client"))
 
       def serverHandler(cmd: String) = {
         logger.info(s"[server] receive $cmd")
@@ -103,8 +103,7 @@ class ScalazNettyRequestResponseSpec extends Specification with ScalazNettyConfi
       EchoGreetingServer.run.runAsync(_ ⇒ ())
 
       def client(mes: String, buf: Buffer[String]) = {
-        val clientStream: Process[Task, ByteVector] =
-          (P.emitAll(Seq.fill(n)(mes) :+ PoisonPill) |> enc0.encoder).map(_.toByteVector)
+        val clientStream = requestSrc(mes).take(n) ++ (P.emit(PoisonPill) |> enc0.encoder).map(_.toByteVector)
 
         for {
           exchange ← Netty.connect(address)(C)

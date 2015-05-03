@@ -3,7 +3,6 @@ package netty
 import java.net.InetSocketAddress
 import java.util.concurrent.Executors._
 
-import mongo.MongoProgram.NamedThreadFactory
 import org.specs2.mutable.Specification
 import scodec.bits.ByteVector
 
@@ -22,8 +21,8 @@ class ScalazNettyRequestNResponse1Spec extends Specification with ScalazNettyCon
     "run with tee" in {
       val batchSize = 5
       val iterationN = 10
-      val S = newFixedThreadPool(2, new NamedThreadFactory("netty-worker2"))
-      val C = newFixedThreadPool(1, new NamedThreadFactory("netty-client"))
+      val S = newFixedThreadPool(2, namedThreadFactory("netty-worker2"))
+      val C = newFixedThreadPool(1, namedThreadFactory("netty-client"))
 
       def reduceServer(batch: Vector[ByteVector]) = {
         logger.info(s"[server] receive batch")
@@ -68,7 +67,7 @@ class ScalazNettyRequestNResponse1Spec extends Specification with ScalazNettyCon
           exchange ← Netty.connect(address)(C)
           Exchange(src, sink) = transcode(exchange)
 
-          out = ((clientStream(mes) take n) ++ poison) |> lift { b ⇒ logger.info(s"send $mes"); b } to sink
+          out = (requestSrc(mes) take n) ++ poison |> lift { b ⇒ logger.info(s"send $mes"); b } to sink
           in = src observe (LoggerS) to io.fillBuffer(buf)
 
           _ ← (out tee in)(zipN(batchSize))

@@ -14,7 +14,7 @@ import scalaz.concurrent.{ Strategy, Task }
 import scalaz.netty.{ ServerConfig, Netty }
 import scalaz.stream._
 
-//request processing threads = netty-worker(default 4) + netty-worker2 + external-worker
+//request processing threads = netty-worker + netty-worker2 + external-worker
 class ServerWithExternalEffect extends Specification with ScalazNettyConfig {
 
   override val address = new InetSocketAddress("localhost", 9093)
@@ -23,8 +23,8 @@ class ServerWithExternalEffect extends Specification with ScalazNettyConfig {
     "run" in {
       val n = 150
       val bs = n / 15
-      val io = newFixedThreadPool(2, new NamedThreadFactory("effect-worker"))
-      val E = newFixedThreadPool(5, new NamedThreadFactory("netty-worker2")) // could have blocking operation since work with queue
+      val io = newFixedThreadPool(2, namedThreadFactory("effect-worker"))
+      val E = newFixedThreadPool(4, namedThreadFactory("netty-worker2")) // could have blocking operation since work with queue
       val S = Strategy.Executor(E)
 
       //in separate pool we can do external effects
