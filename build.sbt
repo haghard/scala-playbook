@@ -46,7 +46,7 @@ libraryDependencies ++= Seq(
     "org.scalaz.stream"   %% "scalaz-stream"       %  "0.7a"    withSources(),
     "com.typesafe.akka"   %% "akka-actor"          %  Akka      withSources(),
     "com.typesafe.akka"   %% "akka-testkit"        %  Akka,
-    "com.typesafe.akka"   %% "akka-stream-experimental" % "1.0-M5",
+    "com.typesafe.akka"   %% "akka-stream-experimental" % "1.0-RC2",
     //"org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5.1" exclude ("org.specs2", "*"),
     //"net.fehmicansaglam"  %% "tepkin"              %  "0.2-SNAPSHOT",
     "log4j"               %  "log4j"                % "1.2.14",

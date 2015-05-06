@@ -1,7 +1,6 @@
 package streams.intergation
 
 import java.util.concurrent.Executors._
-
 import akka.actor.{ ActorRef, ActorSystem }
 import akka.stream.actor.{ ActorSubscriber, ActorPublisher }
 import akka.stream.scaladsl._
@@ -10,18 +9,19 @@ import akka.testkit.{ ImplicitSender, TestKit }
 import mongo.MongoProgram.NamedThreadFactory
 import org.scalatest.concurrent.AsyncAssertions.Waiter
 import org.scalatest.{ BeforeAndAfterAll, BeforeAndAfterEach, MustMatchers, WordSpecLike }
-import streams.api.ProcessPublisher
 
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ SyncVar, ExecutionContext }
-import scala.util.{ Success, Failure }
+import scala.util.{ Try, Success, Failure }
 import scalaz.concurrent.Task
 import scalaz.stream._
 
-class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
+class IntegrationSpec extends TestKit(ActorSystem("integration"))
     with WordSpecLike with MustMatchers
     with BeforeAndAfterEach with BeforeAndAfterAll
     with ImplicitSender {
+
+  val P = Process
 
   override def afterAll() {
     TestKit.shutdownActorSystem(system)
@@ -31,8 +31,6 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
     implicit val executionContext: ExecutionContext = system.dispatcher
     implicit val materializer = ActorFlowMaterializer(ActorFlowMaterializerSettings(system))
   }
-
-  val P = Process
 
   import AkkaContext._
   import streams._
@@ -56,9 +54,9 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
 
       //count ack messages
       implicit val M = Monoid[Int]
-      val source: Process[Task, Int] = P.emitAll(range)
+      val ssSource: Process[Task, Int] = P.emitAll(range)
 
-      source.toAkkaFlow
+      ssSource.toAkkaFlow
         .fold1Map(_ ⇒ 1)
         .runLog.run must be === Vector(range.size)
     }
@@ -66,7 +64,6 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
 
   "Scalaz-Stream process through ActorPublisher ActorSubscriber one by one" must {
     "run" in {
-      //SequentualSinkSubscriber extention point for flow
       val source: Process[Task, Int] = P.emitAll(range)
       source.throughAkkaFlow
         .runLog.run must be === range.toVector
@@ -83,18 +80,20 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
    * |Process(even)|---+
    * +-------------+
    */
-  "Scalaz-Stream processes to Akka Source" must {
-    "run" in {
-      def zip2Source[T](f: ActorRef, s: ActorRef): Source[(T, T), Unit] =
-        Source() { implicit builder: FlowGraph.Builder ⇒
+  "Scalaz-Stream processes to Akka Source(like sstream tee)" must {
+    "run fan-out operation" in {
+      val sync = new SyncVar[Boolean]
+
+      //act like tee, deterministically merge
+      def tee[T](left: ActorRef, right: ActorRef): Source[(T, T), Unit] =
+        Source() { implicit builder ⇒
           import FlowGraph.Implicits._
           val zip = builder.add(Zip[T, T]())
-          Source(ActorPublisher[T](f)) ~> zip.in0
-          Source(ActorPublisher[T](s)) ~> zip.in1
+          Source(ActorPublisher[T](left)) ~> zip.in0
+          Source(ActorPublisher[T](right)) ~> zip.in1
           zip.out
         }
 
-      val w = new Waiter
       val odd: Process[Task, Int] = P.emitAll(range).filter(_ % 2 != 0)
       val even: Process[Task, Int] = P.emitAll(range).filter(_ % 2 == 0)
 
@@ -104,10 +103,12 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
       (odd to Podd.writer[Int]).run.runAsync(_ ⇒ ())
       (even to Peven.writer[Int]).run.runAsync(_ ⇒ ())
 
-      val zipSrc = zip2Source(Podd, Peven) map { v ⇒ s"${v._1} - ${v._2}" }
-      (zipSrc.toMat(Sink.foreach(x ⇒ println(s"read: $x")))(Keep.right)).run()
-        .onComplete { _ ⇒ w.dismiss() }
-      w.await()
+      val zipper = tee[Int](Podd, Peven) map { v ⇒ s"${v._1} - ${v._2}" }
+      (zipper.toMat(Sink.foreach(x ⇒ println(s"read: $x")))(Keep.right))
+        .run()
+        .onComplete { _ ⇒ sync.put(true) }
+
+      sync.get must be === true
     }
   }
 
@@ -122,8 +123,9 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
    *                        +------------+
    */
   "Scalaz-Stream process throw Akka Flow" must {
-    "run" in {
+    "run fan-in operation" in {
       val w = new Waiter
+
       val digits: Process[Task, Int] = P.emitAll(range)
       val p = system.actorOf(streams.BatchWriter.props[Int])
       (digits to p.writer[Int]).run.runAsync(_ ⇒ ())
@@ -162,8 +164,8 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
    */
   "Akka Flow to Scalaz-Stream process" must {
     "run" in {
-      val sync0 = new SyncVar[Boolean]()
-      val sync1 = new SyncVar[Boolean]()
+      val evenSync = new SyncVar[Boolean]()
+      val primeSync = new SyncVar[Boolean]()
 
       def isPrime(n: Int) = {
         def primes = sieve(from(2))
@@ -175,12 +177,12 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
         primesN.contains(n)
       }
 
-      val subEven = system.actorOf(Reader.props[Int], "even-reader")
-      val subPrime = system.actorOf(Reader.props[Int], "prime-reader")
+      val evenR = system.actorOf(Reader.props[Int], "even-reader")
+      val primeR = system.actorOf(Reader.props[Int], "prime-reader")
 
       val odd = akka.stream.scaladsl.Sink.foreach[Int](v ⇒ println(s"odd $v"))
-      val even = akka.stream.scaladsl.Sink(ActorSubscriber[Int](subEven))
-      val prime = akka.stream.scaladsl.Sink(ActorSubscriber[Int](subPrime))
+      val even = akka.stream.scaladsl.Sink(ActorSubscriber[Int](evenR))
+      val prime = akka.stream.scaladsl.Sink(ActorSubscriber[Int](primeR))
 
       val src = akka.stream.scaladsl.Source(range)
 
@@ -193,21 +195,28 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
         bcast.out(2) ~> Flow[Int].filter { isPrime } ~> prime
       }.run
 
-      subEven.reader[Int].map { x ⇒
+      evenR.reader[Int].map { x ⇒
         println(s"even $x")
         x
-      }.take(limit / 2).run.runAsync(_ ⇒ sync0.put(true))
+      }.take(limit / 2).run.runAsync(_ ⇒ evenSync.put(true))
 
-      subPrime.reader[Int].map { x ⇒
+      primeR.reader[Int].map { x ⇒
         println(s"prime $x")
         x
-      }.take(25).run.runAsync(_ ⇒ sync1.put(true))
+      }.take(25).run.runAsync(_ ⇒ primeSync.put(true))
 
-      sync1.get
-      sync0.get must be === true
+      primeSync.get
+      evenSync.get must be === true
     }
   }
 
+  /**
+   *
+   * +---------------+    +-----+   +------------------------+
+   * |Process[Task,T]|----|Flow |---|Process[Task, Vector[T]]|
+   * +---------------+    +-----+   +------------------------+
+   *
+   */
   "Scalaz-Stream process through Akka Flow with batching" must {
     "run" in {
       val size = 16 //
@@ -224,25 +233,32 @@ class ApiIntegrationSpec extends TestKit(ActorSystem("integration"))
     }
   }
 
-  "ProcessPublisher to Akka Flow" must {
+  /**
+   *
+   * +----------+      +----------+     +-----+   +--------+
+   * |Process   |------|AkkaSource|-----|Flow |---|AkkaSink|
+   * +----------+      +----------+     +-- --+   +--------+
+   *
+   */
+  "Scalaz-Stream process to AkkaSource through Flow to AkkaSink" must {
     "run" in {
       val size = 8
-      val sync = new SyncVar[Boolean]()
+      val sync = new SyncVar[Try[Int]]()
       implicit val ex = newFixedThreadPool(3, new NamedThreadFactory("pub-sub"))
 
       implicit val mat = ActorFlowMaterializer(
         ActorFlowMaterializerSettings(system)
           .withInputBuffer(initialSize = size * 2, maxSize = size * 4))
 
-      val akkaSource = akka.stream.scaladsl.Source(ProcessPublisher[Int](P.emitAll(range)))
-      val sink = akka.stream.scaladsl.Sink.foreach[Int](x ⇒ println(s"out $x"))
+      val akkaSource = P.emitAll(range).toAkkaSource
+      val akkaSink = akka.stream.scaladsl.Sink.fold[Int, Int](0)(_ + _)
 
-      FlowGraph.closed(akkaSource, sink)((_, _)) { implicit b ⇒
+      FlowGraph.closed(akkaSource, akkaSink)((_, _)) { implicit b ⇒
         import FlowGraph.Implicits._
-        (src, s) ⇒ src ~> Flow[Int].map(_ * 1) ~> s
-      }.run()(mat)._2.onComplete { _ ⇒ sync.put(true) }
+        (src, sink) ⇒ src ~> Flow[Int].map(_ * 2) ~> sink
+      }.run()(mat)._2.onComplete(r ⇒ sync.put(r))
 
-      sync.get
+      sync.get must be === Success(range.reduce(_ + _) * 2)
     }
   }
 }

@@ -1,4 +1,4 @@
-import java.util.concurrent.Executors
+import java.util.concurrent.{ Executors, ExecutorService }
 import akka.actor.{ ActorRefFactory, PoisonPill, ActorRef }
 import akka.stream.ActorFlowMaterializer
 import akka.stream.actor.ActorPublisherMessage.Cancel
@@ -7,6 +7,7 @@ import akka.stream.actor.{ ActorSubscriber, ActorPublisher }
 import akka.stream.scaladsl.{ FlowGraph, Flow }
 import mongo.MongoProgram.NamedThreadFactory
 import streams.BatchWriter.WriterDone
+import streams.api.ProcessPublisher
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.{ Failure, Success }
@@ -36,6 +37,9 @@ package object streams { outer ⇒
 
     def throughBufferedAkkaFlow(requestSize: Int, f: Flow[I, I, Unit])(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, Vector[I]] =
       outer.createBufferedChain(self, requestSize, f)
+
+    def toAkkaSource(implicit ex: ExecutorService): akka.stream.scaladsl.Source[I, Unit] =
+      akka.stream.scaladsl.Source(ProcessPublisher(self))
   }
 
   private def createBufferedChain[I](process: Process[Task, I], batchSize: Int, f: Flow[I, I, Unit])(implicit arf: ActorRefFactory, m: ActorFlowMaterializer): Process[Task, Vector[I]] = {
@@ -123,16 +127,9 @@ package object streams { outer ⇒
     scalaz.stream.io.resource[Task, ActorRef, I ⇒ Task[Unit]] { Task.delay[ActorRef](pub) } { pub ⇒ Task.delay(pub ! WriterDone) } { pub ⇒ Task.delay(i ⇒ Task.async[Unit](cb ⇒ pub ! WriteRequest(cb, i))) }
   }
 
-  /*case class ChannelAcknowledge[I](cb: \/[Throwable, I] ⇒ Unit, i: I)
-  private def toChannel[I](pub: ActorRef): Channel[Task, I, I] = {
-    io.resource[Task, ActorRef, I ⇒ Task[I]] { Task.delay[ActorRef](pub) } { adapterActor ⇒ Task.delay(()) } { pub ⇒
-      Task.delay(i ⇒ Task.async[I](cb ⇒ pub ! ChannelAcknowledge(cb, i)))
-    }
-  }*/
-
-  import Executors._
   import scala.concurrent._
-  implicit val ec = ExecutionContext.fromExecutor(newFixedThreadPool(2, new NamedThreadFactory("future-worker")))
+
+  implicit val ec = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(2, new NamedThreadFactory("future-worker")))
 
   implicit class FutureSyntax[+A](f: ⇒ Future[A]) {
     def toTask: Task[A] = Task async { cb ⇒

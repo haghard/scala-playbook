@@ -13,7 +13,7 @@ object io {
   trait ChunkResource[I] {
     def request(n: Int): Seq[I]
     def chunk(n: Int): Process[Task, Seq[I]]
-    def chunk10: Process[Task, Seq[I]]
+    def chunkN: Process[Task, Seq[I]]
   }
 
   def batcherHalter[I]: Cause ⇒ Process[Task, Seq[I]] = {
@@ -37,7 +37,7 @@ object io {
           case e: Throwable ⇒ P.fail(e)
         }
 
-      override def chunk10: Process[Task, Seq[I]] = {
+      override def chunkN: Process[Task, Seq[I]] = {
         def go(i: Int): Process[Task, Seq[I]] =
           P.await(Task.delay(request(i))) { seq ⇒
             if (seq.size < i) P.emit(seq) ++ P.halt else P.emit(seq) ++ go(i)

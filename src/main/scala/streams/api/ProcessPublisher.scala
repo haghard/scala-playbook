@@ -55,7 +55,7 @@ class ProcessPublisher[T] private (source: Process[Task, T])(implicit ex: Execut
   val chunkedSource = streams.io.chunkR(source)
   (for {
     reqSize ← signalP.filter(_ > 0)
-    batch ← chunkedSource.chunk(reqSize)
+    batch ← chunkedSource chunk reqSize
     r ← P.emitAll(batch).flatMap(i ⇒ P.eval(Task.delay { subscriber.fold(())(_.onNext(i)) }))
   } yield {
     if (batch.size != reqSize.toInt) throw new Exception("IOF")

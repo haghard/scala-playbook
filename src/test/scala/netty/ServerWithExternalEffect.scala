@@ -4,7 +4,6 @@ import java.net.InetSocketAddress
 import java.util.concurrent.Executors
 import Executors._
 
-import mongo.MongoProgram.NamedThreadFactory
 import org.specs2.mutable.Specification
 import scodec.bits.ByteVector
 
