@@ -1,8 +1,9 @@
 package scalaz
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
 import org.specs2.mutable.Specification
+import rx.lang.scala.schedulers.{ NewThreadScheduler, ComputationScheduler, IOScheduler }
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scalaz.Scalaz._
@@ -67,25 +68,59 @@ class GenericEffects extends Specification {
       .run should be equalTo Address("Baker street")
   }
 
-  "Effect with rx.Observable" in {
+  "Scalar or Vector response with rx.Observable" in {
     import rx.lang.scala._
 
     val getUserById: Long ⇒ Observable[User] =
-      id ⇒ Observable.just(User(id, "Sherlock"))
+      id ⇒ Observable.defer {
+        println(Thread.currentThread().getName + ": producer getUserById")
+        Observable.just(User(id, "Sherlock"))
+      }.subscribeOn(NewThreadScheduler())
 
-    val gerAddressByUser: User ⇒ Observable[Address] =
-      user ⇒ Observable.just(Address("Baker street"))
+    val getAddressByUser: User ⇒ Observable[Address] =
+      user ⇒ Observable.defer {
+        println(Thread.currentThread().getName + ": producer getAddressByUser")
+        Observable.from(Seq(Address("Baker street 1"), Address("Baker street 2")))
+      }.subscribeOn(NewThreadScheduler())
 
     implicit val M = new Monad[Observable]() {
       override def point[A](a: ⇒ A): Observable[A] = Observable.just(a)
       override def bind[A, B](fa: Observable[A])(f: (A) ⇒ Observable[B]): Observable[B] = fa flatMap f
     }
 
-    val src = fetch[Observable](getUserById, gerAddressByUser)(99l)
-    src.toBlocking.head should be equalTo Address("Baker street")
+    import rx.lang.scala.Notification.{ OnError, OnCompleted, OnNext }
+
+    final class ScalaAtomicRef[A](init: A) extends java.util.concurrent.atomic.AtomicReference[A](init) {
+      final def transact(f: A ⇒ A): Unit = {
+        @annotation.tailrec
+        def attempt(): A = {
+          println(Thread.currentThread.getName + " consumer")
+          val a = get
+          val next = f(a)
+          if (compareAndSet(a, f(a))) next else attempt
+        }
+        attempt
+      }
+    }
+
+    val ref = new ScalaAtomicRef(List[Address]()) //java.util.concurrent.atomic.AtomicReference(List[Address]())
+    val latch = new CountDownLatch(1)
+
+    (fetch[Observable](getUserById, getAddressByUser)(99l))
+      .observeOn(ComputationScheduler())
+      .materialize.subscribe { n ⇒
+        n match {
+          case OnNext(v)    ⇒ ref.transact { list: List[Address] ⇒ v :: list }
+          case OnCompleted  ⇒ latch.countDown
+          case OnError(err) ⇒ println("Error: " + err.getMessage)
+        }
+      }
+
+    latch.await()
+    ref.get.reverse should be equalTo Address("Baker street 1") :: Address("Baker street 2") :: Nil
   }
 
-  "Vector based response with Process" in {
+  "Scalar or Vector response with scalaz.Process" in {
     import scalaz.stream.Process
     val P = scalaz.stream.Process
 
