@@ -95,7 +95,7 @@ class TaskSpec extends Specification {
           } yield { logger.info(r); r }
       }
 
-      //Sum suport commutative laws
+      //Sum support commutative laws
       val m = scalaz.Monoid[Int]
       val task = ND.aggregateCommutative(Seq(fib(11), fib(12), fib(13), fib(14)))(m)
       val task1 = ND.aggregate(Seq(fib(11), fib(12), fib(13), fib(14)))(m)
@@ -135,8 +135,8 @@ class TaskSpec extends Specification {
         (x, y) = pair
       } yield { s"$x - $y" }
 
-      val result0 = flow.run(executorIO)
-      val result1 = flow.run(executorCPU)
+      val result0 = flow run executorIO
+      val result1 = flow run executorCPU
 
       val r0 = new SyncVar[Throwable \/ String]
       val r1 = new SyncVar[Throwable \/ String]

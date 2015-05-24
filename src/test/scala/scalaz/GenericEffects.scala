@@ -3,7 +3,6 @@ package scalaz
 import java.util.concurrent.TimeUnit
 
 import org.specs2.mutable.Specification
-
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scalaz.Scalaz._
@@ -66,6 +65,24 @@ class GenericEffects extends Specification {
 
     (fetch[Task](getUserById, gerAddressByUser)(99l))
       .run should be equalTo Address("Baker street")
+  }
+
+  "Effect with rx.Observable" in {
+    import rx.lang.scala._
+
+    val getUserById: Long ⇒ Observable[User] =
+      id ⇒ Observable.just(User(id, "Sherlock"))
+
+    val gerAddressByUser: User ⇒ Observable[Address] =
+      user ⇒ Observable.just(Address("Baker street"))
+
+    implicit val M = new Monad[Observable]() {
+      override def point[A](a: ⇒ A): Observable[A] = Observable.just(a)
+      override def bind[A, B](fa: Observable[A])(f: (A) ⇒ Observable[B]): Observable[B] = fa flatMap f
+    }
+
+    val src = fetch[Observable](getUserById, gerAddressByUser)(99l)
+    src.toBlocking.head should be equalTo Address("Baker street")
   }
 
   "Vector based response with Process" in {
