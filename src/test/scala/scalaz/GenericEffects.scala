@@ -90,34 +90,33 @@ class GenericEffects extends Specification {
 
     import rx.lang.scala.Notification.{ OnError, OnCompleted, OnNext }
 
-    final class ScalaAtomicRef[A](init: A) extends java.util.concurrent.atomic.AtomicReference[A](init) {
+    final class AtomicRegister[A](init: A) extends java.util.concurrent.atomic.AtomicReference[A](init) {
       final def transact(f: A ⇒ A): Unit = {
         @annotation.tailrec
         def attempt(): A = {
-          println(Thread.currentThread.getName + " consumer")
           val a = get
           val next = f(a)
-          if (compareAndSet(a, f(a))) next else attempt
+          if (compareAndSet(a, next)) next else attempt
         }
         attempt
       }
     }
 
-    val ref = new ScalaAtomicRef(List[Address]()) //java.util.concurrent.atomic.AtomicReference(List[Address]())
+    val register = new AtomicRegister(List[Address]())
     val latch = new CountDownLatch(1)
 
     (fetch[Observable](getUserById, getAddressByUser)(99l))
       .observeOn(ComputationScheduler())
       .materialize.subscribe { n ⇒
         n match {
-          case OnNext(v)    ⇒ ref.transact { list: List[Address] ⇒ v :: list }
+          case OnNext(v)    ⇒ register.transact { list: List[Address] ⇒ v :: list }
           case OnCompleted  ⇒ latch.countDown
           case OnError(err) ⇒ println("Error: " + err.getMessage)
         }
       }
 
     latch.await()
-    ref.get.reverse should be equalTo Address("Baker street 1") :: Address("Baker street 2") :: Nil
+    register.get.reverse should be equalTo Address("Baker street 1") :: Address("Baker street 2") :: Nil
   }
 
   "Scalar or Vector response with scalaz.Process" in {
