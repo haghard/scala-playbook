@@ -116,7 +116,7 @@ class TaskSpec extends Specification {
       val executorCPU = Executors.newFixedThreadPool(2, new NamedThreadFactory("cpu-worker"))
 
       val flow = for {
-        executor ← delegate
+        executor ← reader //delegate
         pair ← Nondeterminism[Task].both(
           Task {
             println(Thread.currentThread().getName + "X start")
@@ -130,7 +130,7 @@ class TaskSpec extends Specification {
             println(Thread.currentThread().getName + "Y stop")
             Thread.currentThread().getName + "-y"
           }(executor)
-        ).kleisli
+        ).kleisliR //kleisli
 
         (x, y) = pair
       } yield { s"$x - $y" }

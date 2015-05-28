@@ -41,28 +41,26 @@ resolvers += "RichRelevance Bintray" at "http://dl.bintray.com/rr/releases"
 
 resolvers += "octalmind"             at "https://dl.bintray.com/guillaumebreton/maven"
 
+
+//"org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5.1" exclude ("org.specs2", "*"),
 libraryDependencies ++= Seq(
-    //"org.scalaz"          %% "scalaz-core"         %  "7.1.0"   withSources(),
-    //"org.scalaz"          %% "scalaz-concurrent"   %  "7.1.0"   withSources(),
     "org.mongodb"         %  "mongo-java-driver"   %  "2.13.0"  withSources(),
     "org.scalaz.stream"   %% "scalaz-stream"       %  "0.7a"    withSources(),
     "com.typesafe.akka"   %% "akka-actor"          %  Akka      withSources(),
     "com.typesafe.akka"   %% "akka-testkit"        %  Akka,
     "com.typesafe.akka"   %% "akka-stream-experimental" % "1.0-RC3",
     "com.typesafe.akka"   %% "akka-persistence-experimental"     % Akka,
-    //"org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5.1" exclude ("org.specs2", "*"),
-    //"net.fehmicansaglam"  %% "tepkin"              %  "0.2-SNAPSHOT",
     "io.reactivex"        %% "rxscala"             %  "0.24.1",
     "log4j"               %  "log4j"                % "1.2.14",
     "org.scalaz.netty"    %% "scalaz-netty"         % "0.2.0", //version from my fork and locally builded
-    "org.scodec"          %% "scodec-stream"        % "0.9.0")
+    "org.scodec"          %% "scodec-stream"        % "0.9.0"
+)
 
 
 libraryDependencies ++= Seq(
   "de.bwaldvogel"       %   "mongo-java-server"     %   "1.2.0",
   "org.scalatest"       %%  "scalatest"             %   "2.2.5"     %   "test",
   "org.specs2"          %%  "specs2"                %   "2.4.15"    %   "test"
-  //"org.reactivestreams" %   "reactive-streams-tck"  %   "1.0.0.RC5" %   "test"
 )
 
 scalacOptions ++= Seq(
