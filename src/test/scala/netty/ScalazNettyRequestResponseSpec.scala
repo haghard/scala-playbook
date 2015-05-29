@@ -43,16 +43,28 @@ trait ScalazNettyConfig {
   val logger = Logger.getLogger("netty-server")
 
   def LoggerS: Sink[Task, String] = sink.lift[Task, String] { line ⇒
-    Task.delay(logger.info(line))
+    Task.delay(logger.info(s"Client receive: $line"))
   }
 
   val codec: Codec[String] = scodec.codecs.utf8
-  val enc0 = scodec.stream.encode.many(codec)
-  val dec0 = scodec.stream.decode.many(codec)
 
-  def transcode(ex: Exchange[ByteVector, ByteVector]) = {
+  val codecInt: Codec[Int] = scodec.codecs.int32
+
+  val encUtf = scodec.stream.encode.many(codec)
+  val decUtf = scodec.stream.decode.many(codec)
+
+  val encInt = scodec.stream.encode.many(codecInt)
+  val decInt = scodec.stream.decode.many(codecInt)
+
+  def transcodeUtf(ex: Exchange[ByteVector, ByteVector]) = {
     val Exchange(src, sink) = ex
-    val src2 = src.map(_.toBitVector).flatMap(b ⇒ dec0.decode(b))
+    val src2 = src.map(_.toBitVector).flatMap(b ⇒ decUtf.decode(b))
+    Exchange(src2, sink)
+  }
+
+  def transcodeInt(ex: Exchange[ByteVector, ByteVector]) = {
+    val Exchange(src, sink) = ex
+    val src2 = src.map(_.toBitVector).flatMap(b ⇒ decInt.decode(b))
     Exchange(src2, sink)
   }
 
@@ -60,11 +72,18 @@ trait ScalazNettyConfig {
 
   val PoisonPill = "Poison"
 
+  def requestIntSeq: Process[Task, ByteVector] = {
+    def go(i: Int): Process[Task, Int] =
+      P.await(Task.delay(i))(m ⇒ P.emit(i) ++ go(i + 1))
+
+    (go(1) |> encInt.encoder) map (_.toByteVector)
+  }
+
   def requestSrc(mes: String): Process[Task, ByteVector] = {
     def go(mes: String): Process[Task, String] =
-      P.await(Task.delay(mes))(m ⇒ P.emit(mes) ++ go(mes))
+      P.await(Task.delay(mes))(m ⇒ P.emit(s"$mes-${System.currentTimeMillis()}") ++ go(mes))
 
-    (go(mes) |> enc0.encoder) map (_.toByteVector)
+    (go(mes) |> encUtf.encoder) map (_.toByteVector)
   }
 
   def namedThreadFactory(name: String) = new ThreadFactory {
@@ -95,7 +114,7 @@ class ScalazNettyRequestResponseSpec extends Specification with ScalazNettyConfi
       val EchoGreetingServer = merge.mergeN(2)(Netty.server(address)(S) map { v ⇒
         for {
           _ ← Process.eval(Task.delay(logger.info(s"Connection had accepted from ${v._1}")))
-          Exchange(src, sink) = transcode(v._2)
+          Exchange(src, sink) = transcodeUtf(v._2)
           _ ← src map serverHandler to sink
         } yield ()
       })(Strategy.Executor(S))
@@ -103,11 +122,11 @@ class ScalazNettyRequestResponseSpec extends Specification with ScalazNettyConfi
       EchoGreetingServer.run.runAsync(_ ⇒ ())
 
       def client(mes: String, buf: Buffer[String]) = {
-        val clientStream = requestSrc(mes).take(n) ++ (P.emit(PoisonPill) |> enc0.encoder).map(_.toByteVector)
+        val clientStream = requestSrc(mes).take(n) ++ (P.emit(PoisonPill) |> encUtf.encoder).map(_.toByteVector)
 
         for {
           exchange ← Netty.connect(address)(C)
-          Exchange(src, sink) = transcode(exchange)
+          Exchange(src, sink) = transcodeUtf(exchange)
 
           out = clientStream |> process1.lift { b ⇒ logger.info(s"send $mes"); b } to sink
           in = src observe (LoggerS) to io.fillBuffer(buf)

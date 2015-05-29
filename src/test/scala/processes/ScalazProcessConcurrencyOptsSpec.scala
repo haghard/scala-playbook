@@ -62,25 +62,23 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
 
   "Binding to asynchronous sources" should {
     "Merges non-deterministically processes with mergeN" in {
-      val ioPool = newFixedThreadPool(4, new NamedThreadFactory("io-worker"))
-
-      val pool = newFixedThreadPool(1, new NamedThreadFactory("Gather"))
-      val consumerStrategy = Strategy.Executor(pool)
-
       val range = 0 until 50
+      val ioExecutor = newFixedThreadPool(4, new NamedThreadFactory("io-executor"))
+      val fanOut = Strategy.Executor(newFixedThreadPool(1, new NamedThreadFactory("fan-out")))
+
       val sum = range.foldLeft(0)(_ + _)
       val sync = new SyncVar[Throwable \/ IndexedSeq[Int]]
 
-      def resource(url: Int) =
-        P.eval(Task {
-          Thread.sleep(ThreadLocalRandom.current().nextInt(100, 200)) // simulate blocking call
-          logger.info(s"${Thread.currentThread.getName} - Get $url")
-          url
-        }(ioPool))
+      def resource(url: Int): Process[Task, Int] = P.eval(Task {
+        Thread.sleep(ThreadLocalRandom.current().nextInt(100, 200)) // simulate blocking call
+        logger.info(s"${Thread.currentThread.getName} - Get $url")
+        url
+      }(ioExecutor))
 
-      val source = emitAll(range) |> process1.lift(resource)
+      val source: Process[Task, Process[Task, Int]] =
+        emitAll(range) |> process1.lift(resource)
 
-      merge.mergeN(0)(source)(consumerStrategy).fold(0) { (a, b) ⇒
+      merge.mergeN(0)(source)(fanOut).fold(0) { (a, b) ⇒
         val r = a + b
         logger.info(s"${Thread.currentThread.getName} - current sum: $r")
         r

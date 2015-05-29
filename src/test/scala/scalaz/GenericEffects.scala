@@ -3,7 +3,7 @@ package scalaz
 import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
 import org.specs2.mutable.Specification
-import rx.lang.scala.schedulers.{ NewThreadScheduler, ComputationScheduler, IOScheduler }
+import rx.lang.scala.schedulers.{ NewThreadScheduler, ComputationScheduler }
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scalaz.Scalaz._
