@@ -72,13 +72,6 @@ trait ScalazNettyConfig {
 
   val PoisonPill = "Poison"
 
-  def requestIntSeq: Process[Task, ByteVector] = {
-    def go(i: Int): Process[Task, Int] =
-      P.await(Task.delay(i))(m ⇒ P.emit(i) ++ go(i + 1))
-
-    (go(1) |> encInt.encoder) map (_.toByteVector)
-  }
-
   def requestSrc(mes: String): Process[Task, ByteVector] = {
     def go(mes: String): Process[Task, String] =
       P.await(Task.delay(mes))(m ⇒ P.emit(s"$mes-${System.currentTimeMillis()}") ++ go(mes))
@@ -91,6 +84,11 @@ trait ScalazNettyConfig {
     def newThread(runnable: Runnable) = new Thread(runnable, s"$name - ${num.incrementAndGet}")
   }
 
+  def naturals: Process[Task, Long] = {
+    def go(i: Long): Process[Task, Long] =
+      Process.await(Task.delay(i))(i ⇒ Process.emit(i) ++ go(i + 1l))
+    go(1l)
+  }
 }
 
 class ScalazNettyRequestResponseSpec extends Specification with ScalazNettyConfig {

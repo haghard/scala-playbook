@@ -10,6 +10,7 @@ import scala.collection.mutable.Buffer
 import scalaz.concurrent.{ Strategy, Task }
 import scalaz.netty.Netty
 import scalaz.stream.Process._
+import scalaz.stream.ReceiveY._
 import scalaz.stream._
 import process1._
 
@@ -48,10 +49,25 @@ class ScalazNettyRequestNResponse1Spec extends Specification with ScalazNettyCon
 
       EchoGreetingServer.run.runAsync(_ ⇒ ())
 
-      /*val bWye = wye.dynamic(
-        (x: (Unit, Long)) ⇒ if (x._2 % batchSize == 0) { wye.Request.R } else { wye.Request.L },
+      val bWye = wye.dynamic(
+        (x: (Unit, Long)) ⇒ if (x._2 % batchSize == 0) wye.Request.R else wye.Request.L,
         (y: Unit) ⇒ wye.Request.L
-      )*/
+      )
+
+      /**
+       *
+       * @param n
+       * @tparam I
+       * @tparam I2
+       * @return
+       */
+      def nLeft[I, I2](n: Int): Wye[I, I2, Any] = {
+        def go(n: Int, limit: Int): Wye[I, I2, Any] = {
+          if (n > 0) wye.receiveL[I, I2, Any] { l: I ⇒ emit[I](l) ++ go(n - 1, limit) }
+          else wye.receiveR[I, I2, Any] { r: I2 ⇒ emit[I2](r) ++ go(limit, limit) }
+        }
+        go(n, n)
+      }
 
       def next[I, I2](l: I, r: I2, n: Int, limit: Int): Tee[I, I2, Any] =
         if (n > 0) nextL(l, n - 1, limit) else nextR(r, limit, limit)
@@ -63,7 +79,7 @@ class ScalazNettyRequestNResponse1Spec extends Specification with ScalazNettyCon
 
       def init[I, I2](n: Int, limit: Int): Tee[I, I2, Any] = awaitL[I].flatMap { nextL(_, n - 1, n) }
 
-      def zipN2[I, I2](n: Int): Tee[I, I2, Any] =
+      def zipDeterministic[I, I2](n: Int): Tee[I, I2, Any] =
         init[I, I2](n, n)
 
       /*
@@ -88,8 +104,9 @@ class ScalazNettyRequestNResponse1Spec extends Specification with ScalazNettyCon
           out = (requestSrc(target) take n) ++ poison |> lift { b ⇒ logger.info(s"send for $target"); b } to sink
           in = src observe (LoggerS) to io.fillBuffer(buf)
 
-          _ ← (out tee in)(zipN2(batchSize)) //map(_ => 1)
-            //_ ← ((out zip nats).wye(in)(bWye)(Strategy.Executor(C)))
+          //_ ← (out tee in)(zipDeterministic(batchSize)) //map(_ => 1)
+          //_ ← ((out zip naturals).wye(in)(bWye)(Strategy.Executor(C)))
+          _ ← (out.wye(in)(nLeft(batchSize))(Strategy.Executor(C)))
             .take((batchSize + 1) * iterationN + batchSize) // for correct client exit
         } yield ()
       }
