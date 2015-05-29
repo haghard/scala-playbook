@@ -19,13 +19,15 @@ class StreamingServerSpec extends Specification with ScalazNettyConfig {
   val n = 15
   override val address = new InetSocketAddress("localhost", 9092)
 
-  val E = newFixedThreadPool(5, new NamedThreadFactory("netty-worker2"))
-  val S = Strategy.Executor(E)
+  val C = newFixedThreadPool(2, new NamedThreadFactory("client-worker"))
+  
+  val S = newFixedThreadPool(5, new NamedThreadFactory("server-worker"))
+  val Topic = Strategy.Executor(S)
 
   "Streaming with period the same content" should {
     "run" in {
 
-      val topic = async.topic[ByteVector]()(S)
+      val topic = async.topic[ByteVector]()(Topic)
       val period = new FiniteDuration(1, TimeUnit.SECONDS)
 
       (time.awakeEvery(period).zip(P.range(0, n)))
@@ -57,13 +59,16 @@ class StreamingServerSpec extends Specification with ScalazNettyConfig {
       val clientsCommands: Sink[Task, ByteVector] = sink.lift[Task, ByteVector] { bts: ByteVector ⇒
         Task.delay {
           val cmd = bts.decodeUtf8.fold(ex ⇒ ex.getMessage, r ⇒ r)
-          if (cmd == "stop") throw new Exception("stop-server")
-          else println(cmd)
+          logger.info(s"Client say $cmd")
+          if (cmd == "stop")
+            throw new Exception("Kind of graceful exit")
+          else
+            throw new Exception("Unexpected command from client")
         }
       }
 
-      //Server for 2 parallel at most clients
-      scalaz.stream.merge.mergeN(2)(Netty.server(address)(E).map { v ⇒
+      //Server for at most 2 parallel clients
+      scalaz.stream.merge.mergeN(2)(Netty.server(address)(S).map { v ⇒
         val addr = v._1
         val exchange = v._2
         (for {
@@ -71,11 +76,11 @@ class StreamingServerSpec extends Specification with ScalazNettyConfig {
 
           in = exchange.read to clientsCommands
           out = topic.subscribe to exchange.write
-          _ ← in merge out
+          _ ← (in merge out)(Strategy.Executor(S))
         } yield ()) onHalt errorHandler
-      })(S).onComplete(P.eval(cleanup)).runLog.runAsync(_ ⇒ ())
+      })(Topic).onComplete(P.eval(cleanup)).runLog.runAsync(_ ⇒ ())
 
-      def client(id: Long, n0: Int) = Netty connect address flatMap { exchange ⇒
+      def client(id: Long, n0: Int) = Netty.connect(address)(C).flatMap { exchange ⇒
         (for {
           data ← exchange.read.take(n0).map(_.decodeUtf8.fold(ex ⇒ ex.getMessage, r ⇒ r))
           _ ← Process.eval(Task.delay(logger.info(s"client $id receive: $data")))
