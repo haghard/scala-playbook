@@ -1,16 +1,22 @@
 package scalaz
 
+import java.util.concurrent.Executors._
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{ ThreadFactory, Executors, CountDownLatch, TimeUnit }
 
+import mongo.MongoProgram.NamedThreadFactory
 import monifu.reactive.Ack.{ Cancel, Continue }
 import org.specs2.mutable.Specification
 import rx.lang.scala.schedulers.NewThreadScheduler
+import scala.collection.mutable.Buffer
+import scala.concurrent.forkjoin.ThreadLocalRandom
 import scala.concurrent.{ ExecutionContext, Future }
 import scala.concurrent.duration.FiniteDuration
 import scalaz.Scalaz._
-import scalaz.concurrent.Task
+import scalaz.concurrent.{ Strategy, Task }
 import scala.language.higherKinds
+import scalaz.stream.Process._
+import scalaz.stream.{ process1, io }
 
 class GenericEffects extends Specification {
 
@@ -124,7 +130,8 @@ class GenericEffects extends Specification {
     }
 
     val getAddressByUser: User ⇒ Observable[Address] = {
-      u ⇒ Observable.fromIterable(seq).subscribeOn(P)
+      u ⇒
+        Observable.fromIterable(seq).subscribeOn(P)
     }
 
     (fetch[Observable](getUserById, getAddressByUser)(261l))
@@ -195,21 +202,54 @@ class GenericEffects extends Specification {
   "Scalar or Vector response with scalaz.Process" in {
     import scalaz.stream.Process
     val P = scalaz.stream.Process
+    val parallelism = Runtime.getRuntime.availableProcessors() / 2
+    val ioE = newFixedThreadPool(parallelism, new NamedThreadFactory("remote-process"))
 
-    def addresses = {
-      def go(n: String): Process[Task, Address] =
-        P.await(Task.delay(n))(i ⇒ P.emit(Address(i)) ++ go(i + " !"))
-      go("Baker street")
-    }
+    val buf = Buffer.empty[Address]
+    val seq = (1 to 100).toSeq
 
-    val getUserById: Long ⇒ Process[Task, User] =
-      id ⇒ P.emit(User(id, "Sherlock"))
+    def resource(i: Int): Process[Task, Address] = P.eval(Task {
+      Thread.sleep(ThreadLocalRandom.current().nextInt(100, 200)) // simulate blocking call
+      println(s"${Thread.currentThread().getName} - Process fetch address for $i")
+      Address("Baker street " + i)
+    }(ioE))
 
-    val gerAddressByUser: User ⇒ Process[Task, Address] =
-      id ⇒ addresses.take(3)
+    def resource2(i: Int): Task[Address] = Task {
+      Thread.sleep(ThreadLocalRandom.current().nextInt(100, 200)) // simulate blocking call
+      println(s"${Thread.currentThread().getName} - Process fetch address for $i")
+      Address("Baker street" + i)
+    }(ioE)
 
-    (fetch[({ type λ[x] = Process[Task, x] })#λ](getUserById, gerAddressByUser)(99l))
-      .runLog.run should be equalTo Vector(Address("Baker street"),
-        Address("Baker street !"), Address("Baker street ! !"))
+    val source: Process[Task, Process[Task, Address]] = emitAll(seq) map { resource _ }
+
+    val source2: Process[Task, Task[Address]] = emitAll(seq) map { resource2 _ }
+
+    val getUserById: (Long ⇒ Process[Task, User]) =
+      id ⇒ P.eval(Task {
+        Thread.sleep(ThreadLocalRandom.current().nextInt(100, 200))
+        println(Thread.currentThread().getName + ": Process produce user")
+        User(id, "Sherlock")
+      }(ioE))
+
+    val getAddressByUser: (User ⇒ Process[Task, Address]) =
+      user ⇒
+        scalaz.stream.merge.mergeN(parallelism * 2)(source)(Strategy.Executor(ioE))
+
+    val getUnOrderedAddressByUser2: (User ⇒ Process[Task, Address]) =
+      user ⇒
+        source2 gather parallelism
+
+    val getOrderedAddressByUser3: (User ⇒ Process[Task, Address]) =
+      user ⇒
+        source2 sequence parallelism
+
+    val Proc = fetch[({ type λ[x] = Process[Task, x] })#λ](getUserById, getAddressByUser)(99l)
+
+    val r = (Proc to io.fillBuffer(buf)).run.attemptRun
+
+    println(buf)
+
+    r should be equalTo \/-(())
+    seq.size should be equalTo buf.size
   }
 }

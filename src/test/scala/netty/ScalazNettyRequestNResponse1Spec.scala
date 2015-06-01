@@ -3,10 +3,12 @@ package netty
 import java.net.InetSocketAddress
 import java.util.concurrent.Executors._
 
+import monifu.concurrent.atomic.Atomic
 import org.specs2.mutable.Specification
 import scodec.bits.ByteVector
 
 import scala.collection.mutable.Buffer
+import scalaz.{ \/-, Nondeterminism }
 import scalaz.concurrent.{ Strategy, Task }
 import scalaz.netty.Netty
 import scalaz.stream.Process._
@@ -21,78 +23,68 @@ class ScalazNettyRequestNResponse1Spec extends Specification with ScalazNettyCon
     "run with tee" in {
       val batchSize = 5
       val iterationN = 11
-      val S = newFixedThreadPool(2, namedThreadFactory("netty-worker2"))
-      val C = newFixedThreadPool(1, namedThreadFactory("netty-client"))
+      val S = newFixedThreadPool(4, namedThreadFactory("netty-worker2"))
+      val C = newFixedThreadPool(2, namedThreadFactory("netty-client"))
 
-      def reduceServer(batch: Vector[ByteVector]) = {
-        logger.info(s"[server] receive batch")
+      val clientSize = 2
+      val bufBob = Buffer.empty[String]
+      val bufAlice = Buffer.empty[String]
 
-        logger.info("Server receive: " +
-          batch.map(_.decodeUtf8.fold(ex ⇒ ex.getMessage, r ⇒ r)).mkString(", "))
+      val state = Atomic(0)
+      def serverBody(batch: Vector[ByteVector]) = {
+        logger.info(s"Server receive: ${batch.map(_.decodeUtf8.fold(ex ⇒ ex.getMessage, r ⇒ r)).mkString(", ")}")
 
         if (batch(0).decodeUtf8.fold(ex ⇒ ex.getMessage, r ⇒ r) == PoisonPill) {
           logger.info(s"kill message received")
-          throw new Exception("Stop command received")
+          if (state.transformAndGet(_ + 1) == clientSize)
+            throw new Exception("Stop command received")
         }
 
         batch.reduce(_ ++ _)
       }
 
-      val EchoGreetingServer = merge.mergeN(2)(Netty.server(address)(S) map { v ⇒
+      val EchoGreetingServer = merge.mergeN(clientSize)(Netty.server(address)(S).map { v ⇒
         for {
-          _ ← Process.eval(Task.delay(logger.info(s"Connection had accepted from ${v._1}")))
+          _ ← Process.eval(Task.delay(logger.info(s"Connection was accepted from ${v._1}")))
           Exchange(src, sink) = v._2
-          _ ← src chunk batchSize map reduceServer to sink
+          _ ← src chunk batchSize map serverBody to sink
         } yield ()
       })(Strategy.Executor(S))
 
-      EchoGreetingServer.run.runAsync(_ ⇒ ())
-
-      val bWye = wye.dynamic(
+      def client(target: String, buf: Buffer[String]) = {
+        /*val bWye = wye.dynamic(
         (x: (Unit, Long)) ⇒ if (x._2 % batchSize == 0) wye.Request.R else wye.Request.L,
         (y: Unit) ⇒ wye.Request.L
-      )
+        )*/
 
-      /**
-       *
-       * @param n
-       * @tparam I
-       * @tparam I2
-       * @return
-       */
-      def nLeft[I, I2](n: Int): Wye[I, I2, Any] = {
-        def go(n: Int, limit: Int): Wye[I, I2, Any] = {
-          if (n > 0) wye.receiveL[I, I2, Any] { l: I ⇒ emit[I](l) ++ go(n - 1, limit) }
-          else wye.receiveR[I, I2, Any] { r: I2 ⇒ emit[I2](r) ++ go(limit, limit) }
+        def zipN[I, I2](n: Int): Tee[I, I2, Any] = {
+          def go(n: Int, limit: Int): Tee[I, I2, Any] = {
+            if (n > 0) awaitL[I] ++ go(n - 1, limit)
+            else awaitR[I2] ++ go(limit, limit)
+          }
+          go(n, n)
         }
-        go(n, n)
-      }
 
-      def next[I, I2](l: I, r: I2, n: Int, limit: Int): Tee[I, I2, Any] =
-        if (n > 0) nextL(l, n - 1, limit) else nextR(r, limit, limit)
-
-      def nextR[I, I2](r: I2, n: Int, limit: Int): Tee[I, I2, Any] = tee.receiveROr[I, I2, Any](emit(r))(next(_, r, n, limit))
-      def nextL[I, I2](l: I, n: Int, limit: Int): Tee[I, I2, Any] = tee.receiveLOr[I, I2, Any](emit(l))(next(_, l, n, limit))
-
-      def initT[I, I2](n: Int, limit: Int): Tee[I, I2, Any] = tee.receiveL[I, I2, Any] { l: I ⇒ emit[I](l); nextL[I, I2](l, n - 1, limit) }
-
-      def init[I, I2](n: Int, limit: Int): Tee[I, I2, Any] = awaitL[I].flatMap { nextL(_, n - 1, n) }
-
-      def zipDeterministic[I, I2](n: Int): Tee[I, I2, Any] =
-        init[I, I2](n, n)
-
-      /*
-      * It is tee reading `n` elements from the left, then one element from right
-      */
-      def zipN[I, I2](n: Int): Tee[I, I2, Any] = {
-        def go(n: Int, limit: Int): Tee[I, I2, Any] = {
-          if (n > 0) awaitL[I] ++ go(n - 1, limit)
-          else awaitR[I2] ++ go(limit, limit)
+        def nLeft[I, I2](n: Int): Wye[I, I2, Any] = {
+          def go(n: Int, limit: Int): Wye[I, I2, Any] = {
+            if (n > 0) wye.receiveL[I, I2, Any] { l: I ⇒ emit[I](l) ++ go(n - 1, limit) }
+            else wye.receiveR[I, I2, Any] { r: I2 ⇒ emit[I2](r) ++ go(limit, limit) }
+          }
+          go(n, n)
         }
-        go(n, n)
-      }
 
-      def client(target: String, buf: Buffer[String]) = {
+        def next[I, I2](l: I, r: I2, n: Int, limit: Int): Tee[I, I2, Any] =
+          if (n > 0) nextL(l, n - 1, limit) else nextR(r, limit, limit)
+
+        def nextR[I, I2](r: I2, n: Int, limit: Int): Tee[I, I2, Any] = tee.receiveROr[I, I2, Any](emit(r))(next(_, r, n, limit))
+        def nextL[I, I2](l: I, n: Int, limit: Int): Tee[I, I2, Any] = tee.receiveLOr[I, I2, Any](emit(l))(next(_, l, n, limit))
+
+        def initT[I, I2](n: Int, limit: Int): Tee[I, I2, Any] = tee.receiveL[I, I2, Any] { l: I ⇒ emit[I](l); nextL[I, I2](l, n - 1, limit) }
+
+        def init[I, I2](n: Int, limit: Int): Tee[I, I2, Any] = awaitL[I].flatMap { nextL(_, n - 1, n) }
+
+        def zipDeterministic[I, I2](n: Int): Tee[I, I2, Any] = init[I, I2](n, n)
+
         val n = iterationN * batchSize
         val poison = (P.emitAll(Seq.fill(batchSize)(PoisonPill)) |> encUtf.encoder) map (_.toByteVector)
 
@@ -103,16 +95,25 @@ class ScalazNettyRequestNResponse1Spec extends Specification with ScalazNettyCon
           out = (requestSrc(target) take n) ++ poison |> lift { b ⇒ logger.info(s"send for $target"); b } to sink
           in = src observe (LoggerS) to io.fillBuffer(buf)
 
-          //_ ← (out tee in)(zipDeterministic(batchSize)) //map(_ => 1)
+          //_ ← (out tee in)(zipDeterministic(batchSize))
           //_ ← ((out zip naturals).wye(in)(bWye)(Strategy.Executor(C)))
           _ ← (out.wye(in)(nLeft(batchSize))(Strategy.Executor(C)))
             .take((batchSize + 1) * iterationN + batchSize) // for correct client exit
         } yield ()
       }
 
-      val buf = Buffer.empty[String]
-      client("Bob", buf).runLog[Task, Unit].run
-      buf.size must be equalTo iterationN
+      //Start server
+      EchoGreetingServer.run.runAsync(_ ⇒ ())
+
+      //Start clients
+      val r = Nondeterminism[Task]
+        .mapBoth(client("Bob", bufBob).run, client("Alice", bufAlice).run) { (l: Unit, r: Unit) ⇒ true }
+        .attemptRun
+
+      r must be equalTo \/-(true)
+
+      bufBob.size must be equalTo iterationN
+      bufAlice.size must be equalTo iterationN
     }
   }
 }
