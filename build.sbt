@@ -50,10 +50,11 @@ libraryDependencies ++= Seq(
     "com.typesafe.akka"   %% "akka-testkit"        %  Akka,
     "com.typesafe.akka"   %% "akka-stream-experimental" % "1.0-RC3",
     "com.typesafe.akka"   %% "akka-persistence-experimental"     % Akka,
-    "io.reactivex"        %% "rxscala"             %  "0.24.1",
-    "log4j"               %  "log4j"                % "1.2.14",
-    "org.scalaz.netty"    %% "scalaz-netty"         % "0.2.0", //version from my fork and locally builded
-    "org.scodec"          %% "scodec-stream"        % "0.9.0"
+    "io.reactivex"        %% "rxscala"             % "0.24.1",
+    "org.monifu"          %% "monifu"              % "1.0-M1",
+    "log4j"               %  "log4j"               % "1.2.14",
+    "org.scalaz.netty"    %% "scalaz-netty"        % "0.2.0", //version from my fork and locally builded
+    "org.scodec"          %% "scodec-stream"       % "0.9.0"
 )
 
 

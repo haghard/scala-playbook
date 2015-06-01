@@ -10,7 +10,6 @@ import scala.collection.mutable.Buffer
 import scalaz.concurrent.{ Strategy, Task }
 import scalaz.netty.Netty
 import scalaz.stream.Process._
-import scalaz.stream.ReceiveY._
 import scalaz.stream._
 import process1._
 

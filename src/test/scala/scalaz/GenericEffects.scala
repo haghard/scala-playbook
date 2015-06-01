@@ -1,16 +1,47 @@
 package scalaz
 
-import java.util.concurrent.{ CountDownLatch, TimeUnit }
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.{ ThreadFactory, Executors, CountDownLatch, TimeUnit }
 
+import monifu.reactive.Ack.{ Cancel, Continue }
 import org.specs2.mutable.Specification
-import rx.lang.scala.schedulers.{ NewThreadScheduler, ComputationScheduler }
-import scala.concurrent.Future
+import rx.lang.scala.schedulers.NewThreadScheduler
+import scala.concurrent.{ ExecutionContext, Future }
 import scala.concurrent.duration.FiniteDuration
 import scalaz.Scalaz._
 import scalaz.concurrent.Task
 import scala.language.higherKinds
 
 class GenericEffects extends Specification {
+
+  import java.util.concurrent.atomic.{ AtomicReference ⇒ JavaAtomicReference }
+
+  final class AtomicRegister[A](init: A) extends JavaAtomicReference[A](init) {
+    final def transact(f: A ⇒ A): Unit = {
+      @annotation.tailrec
+      def attempt: A = {
+        val current = get
+        val updated = f(current)
+        if (compareAndSet(current, updated)) updated else attempt
+      }
+      attempt
+    }
+
+    final def transactAndGet(f: A ⇒ A): A = {
+      @annotation.tailrec
+      def attempt: A = {
+        val current = get
+        val updated = f(get)
+        if (compareAndSet(current, updated)) updated else attempt
+      }
+      attempt
+    }
+  }
+
+  def namedTF(name: String) = new ThreadFactory {
+    val num = new AtomicInteger(1)
+    def newThread(runnable: Runnable) = new Thread(runnable, s"$name - ${num.incrementAndGet}")
+  }
 
   //Domain
   case class User(id: Long, name: String)
@@ -68,48 +99,90 @@ class GenericEffects extends Specification {
       .run should be equalTo Address("Baker street")
   }
 
-  "Scalar or Vector response with rx.Observable" in {
-    import rx.lang.scala._
+  "Scalar or Vector response with monifu.Observable" in {
+    import monifu.reactive._
+    import monifu.concurrent.Scheduler
 
-    val getUserById: Long ⇒ Observable[User] =
-      id ⇒ Observable.defer {
-        println(Thread.currentThread().getName + ": producer getUserById")
-        Observable.just(User(id, "Sherlock"))
-      }.subscribeOn(NewThreadScheduler())
+    val P = Scheduler.computation(2)
+    implicit val C = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(2, namedTF("consumers")))
+    val seq = List(Address("Baker street 1"), Address("Baker street 2"), Address("Baker street 3"), Address("Baker street 4"))
 
-    val getAddressByUser: User ⇒ Observable[Address] =
-      user ⇒ Observable.defer {
-        println(Thread.currentThread().getName + ": producer getAddressByUser")
-        Observable.from(Seq(Address("Baker street 1"), Address("Baker street 2")))
-      }.subscribeOn(NewThreadScheduler())
+    val latch = new CountDownLatch(1)
+    val register = new AtomicRegister(List[Address]())
 
-    implicit val M = new Monad[Observable]() {
-      override def point[A](a: ⇒ A): Observable[A] = Observable.just(a)
+    implicit val monifuM = new Monad[Observable]() {
+      override def point[A](a: ⇒ A): Observable[A] = Observable.unit(a)
       override def bind[A, B](fa: Observable[A])(f: (A) ⇒ Observable[B]): Observable[B] = fa flatMap f
+    }
+
+    val getUserById: Long ⇒ Observable[User] = {
+      id ⇒
+        Observable.unit({
+          println(Thread.currentThread().getName + ": Observable producer User")
+          User(id, "Sherlock")
+        }).subscribeOn(P)
+    }
+
+    val getAddressByUser: User ⇒ Observable[Address] = {
+      u ⇒ Observable.fromIterable(seq).subscribeOn(P)
+    }
+
+    (fetch[Observable](getUserById, getAddressByUser)(261l))
+      .subscribe(new Observer[Address] {
+        def onNext(elem: Address) = Future {
+          println(Thread.currentThread().getName + s": Observer consume $elem")
+          val results = register.transactAndGet { elem :: _ }
+          if (results.size == 4) {
+            latch.countDown()
+            Cancel
+          } else Continue
+        }(C)
+
+        def onError(ex: scala.Throwable): scala.Unit = {
+          println("Error: " + ex.getMessage)
+          latch.countDown()
+        }
+        def onComplete(): scala.Unit = println("onComplete")
+      })(P)
+
+    latch.await()
+    register.get.reverse should be equalTo seq
+  }
+
+  "Scalar or Vector response with rx.Observable" in {
+    import rx.lang.scala.{ Observable ⇒ RxObservable }
+
+    val P = NewThreadScheduler()
+    val register = new AtomicRegister(List[Address]())
+    val latch = new CountDownLatch(1)
+
+    val getUserById: Long ⇒ RxObservable[User] =
+      id ⇒ RxObservable.defer {
+        println(Thread.currentThread().getName + ": RxObservable producer getUserById")
+        Thread.sleep(1000)
+        RxObservable.just(User(id, "Sherlock"))
+      }.subscribeOn(P)
+
+    val getAddressByUser: User ⇒ RxObservable[Address] =
+      user ⇒ RxObservable.defer {
+        println(Thread.currentThread().getName + ": RxObservable producer getAddressByUser")
+        RxObservable.from(Seq(Address("Baker street 1"), Address("Baker street 2")))
+      }.subscribeOn(P)
+
+    implicit val M = new Monad[RxObservable]() {
+      override def point[A](a: ⇒ A): RxObservable[A] = RxObservable.just(a)
+      override def bind[A, B](fa: RxObservable[A])(f: (A) ⇒ RxObservable[B]): RxObservable[B] = fa flatMap f
     }
 
     import rx.lang.scala.Notification.{ OnError, OnCompleted, OnNext }
 
-    final class AtomicRegister[A](init: A) extends java.util.concurrent.atomic.AtomicReference[A](init) {
-      final def transact(f: A ⇒ A): Unit = {
-        @annotation.tailrec
-        def attempt(): A = {
-          val a = get
-          val next = f(a)
-          if (compareAndSet(a, next)) next else attempt
-        }
-        attempt
-      }
-    }
-
-    val register = new AtomicRegister(List[Address]())
-    val latch = new CountDownLatch(1)
-
-    (fetch[Observable](getUserById, getAddressByUser)(99l))
-      .observeOn(ComputationScheduler())
+    (fetch[RxObservable](getUserById, getAddressByUser)(99l))
+      .observeOn(rx.lang.scala.schedulers.ComputationScheduler())
       .materialize.subscribe { n ⇒
         n match {
-          case OnNext(v)    ⇒ register.transact { list: List[Address] ⇒ v :: list }
+          case OnNext(v) ⇒
+            println(Thread.currentThread().getName + ": RxObserver consume Address")
+            register.transact { v :: _ }
           case OnCompleted  ⇒ latch.countDown
           case OnError(err) ⇒ println("Error: " + err.getMessage)
         }
