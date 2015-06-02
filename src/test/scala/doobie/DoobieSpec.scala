@@ -1,11 +1,7 @@
-/*
-
-wait for doobie switch from shapless-2.0.0 to shapless-2.1.0 to work with scalaz-netty
-
+//wait for doobie switch from shapless-2.0.0 to shapless-2.1.0 to work with scalaz-netty
 package doobie
 
 import java.sql.DriverManager
-
 import doobie.util.update.Update0
 import org.specs2.mock.Mockito
 import org.specs2.mutable.Specification
@@ -134,6 +130,4 @@ class DoobieSpec extends Specification with Mockito {
       a ← q.transact(xa).ensuring(xa.dispose)
     } yield a).attemptRun should be equalTo \/-(list)
   }
-
 }
-*/
