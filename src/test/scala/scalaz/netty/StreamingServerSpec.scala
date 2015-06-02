@@ -1,4 +1,4 @@
-package netty
+package scalaz.netty
 
 import java.net.InetSocketAddress
 import java.util.Date
@@ -12,7 +12,6 @@ import scodec.bits.ByteVector
 import scala.concurrent.duration.FiniteDuration
 import scalaz.Nondeterminism
 import scalaz.concurrent.{ Strategy, Task }
-import scalaz.netty.Netty
 import scalaz.stream._
 
 class StreamingServerSpec extends Specification with ScalazNettyConfig {
@@ -69,9 +68,9 @@ class StreamingServerSpec extends Specification with ScalazNettyConfig {
       //Server for at most 2 parallel clients
       scalaz.stream.merge.mergeN(2)(Netty.server(address)(S).map { v ⇒
         val addr = v._1
-        val exchange = v._2
+        val exchange = v._3
         (for {
-          _ ← Process.eval(Task.delay(logger.info(s"Accepted connection from $addr")))
+          _ ← Process.eval(Task.delay(logger.info(s"Start interact with $addr")))
 
           in = exchange.read to clientsCommands
           out = topic.subscribe to exchange.write

@@ -1,17 +1,15 @@
-package netty
+package scalaz.netty
 
 import java.net.InetSocketAddress
 import java.util.concurrent.Executors
-import Executors._
+import java.util.concurrent.Executors._
 
 import org.specs2.mutable.Specification
 import scodec.bits.ByteVector
 
 import scala.concurrent.forkjoin.ThreadLocalRandom
-import scalaz.stream.Process
 import scalaz.concurrent.{ Strategy, Task }
-import scalaz.netty.{ ServerConfig, Netty }
-import scalaz.stream._
+import scalaz.stream.{ Process, _ }
 
 //request processing threads = netty-worker + netty-worker2 + external-worker
 class ServerWithExternalEffect extends Specification with ScalazNettyConfig {
@@ -43,7 +41,7 @@ class ServerWithExternalEffect extends Specification with ScalazNettyConfig {
 
       val EchoGreetingServer = scalaz.stream.merge.mergeN(1)(Netty.server(address, cfg)(E).map { v ⇒
         val addr = v._1
-        val exchange = v._2
+        val exchange = v._3
         for {
           _ ← Process.eval(Task.delay(logger.info(s"Accepted connection from $addr")))
           out ← exchange.read through server //every message from single client will be handled sequentially

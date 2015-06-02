@@ -53,7 +53,7 @@ libraryDependencies ++= Seq(
     "io.reactivex"        %% "rxscala"             % "0.24.1",
     "org.monifu"          %% "monifu"              % "1.0-M1",
     "log4j"               %  "log4j"               % "1.2.14",
-    "org.scalaz.netty"    %% "scalaz-netty"        % "0.2.0", //version from my fork and locally builded
+    "org.scalaz.netty"    %% "scalaz-netty"        % "0.2.1", //version from my fork and locally builded
     "org.scodec"          %% "scodec-stream"       % "0.9.0"
 )
 

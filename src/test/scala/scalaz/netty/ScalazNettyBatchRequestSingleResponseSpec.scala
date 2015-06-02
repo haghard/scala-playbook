@@ -1,21 +1,19 @@
+package scalaz
 package netty
 
 import java.net.InetSocketAddress
 import java.util.concurrent.Executors._
-
-import monifu.concurrent.atomic.Atomic
 import org.specs2.mutable.Specification
 import scodec.bits.ByteVector
 
 import scala.collection.mutable.Buffer
-import scalaz.{ \/-, Nondeterminism }
 import scalaz.concurrent.{ Strategy, Task }
-import scalaz.netty.Netty
+import scalaz.netty.Server.{ ServerState, TaskVar }
 import scalaz.stream.Process._
 import scalaz.stream._
-import process1._
+import scalaz.stream.process1._
 
-class ScalazNettyRequestNResponse1Spec extends Specification with ScalazNettyConfig {
+class ScalazNettyBatchRequestSingleResponseSpec extends Specification with ScalazNettyConfig {
 
   override val address = new InetSocketAddress("localhost", 9095)
 
@@ -23,20 +21,25 @@ class ScalazNettyRequestNResponse1Spec extends Specification with ScalazNettyCon
     "run with tee" in {
       val batchSize = 5
       val iterationN = 11
-      val S = newFixedThreadPool(4, namedThreadFactory("netty-worker2"))
-      val C = newFixedThreadPool(2, namedThreadFactory("netty-client"))
 
-      val clientSize = 2
+      val clientSize = 3
+
+      val S = newFixedThreadPool(4, namedThreadFactory("server"))
+      val C = newFixedThreadPool(clientSize, namedThreadFactory("client"))
+
       val bufBob = Buffer.empty[String]
       val bufAlice = Buffer.empty[String]
+      val bufJack = Buffer.empty[String]
 
-      val state = Atomic(0)
-      def serverBody(batch: Vector[ByteVector]) = {
+      def serverBody(batch: Vector[ByteVector], state: TaskVar[ServerState], address: InetSocketAddress) = {
         logger.info(s"Server receive: ${batch.map(_.decodeUtf8.fold(ex ⇒ ex.getMessage, r ⇒ r)).mkString(", ")}")
+        state.modify { c ⇒
+          c.copy(tracker = c.tracker + (address -> (c.tracker.getOrElse(address, 0l) + batch.size)))
+        }.run
 
         if (batch(0).decodeUtf8.fold(ex ⇒ ex.getMessage, r ⇒ r) == PoisonPill) {
           logger.info(s"kill message received")
-          if (state.transformAndGet(_ + 1) == clientSize)
+          if (state.read.run.tracker.keySet.size == clientSize)
             throw new Exception("Stop command received")
         }
 
@@ -45,9 +48,12 @@ class ScalazNettyRequestNResponse1Spec extends Specification with ScalazNettyCon
 
       val EchoGreetingServer = merge.mergeN(clientSize)(Netty.server(address)(S).map { v ⇒
         for {
-          _ ← Process.eval(Task.delay(logger.info(s"Connection was accepted from ${v._1}")))
-          Exchange(src, sink) = v._2
-          _ ← src chunk batchSize map serverBody to sink
+          _ ← Process.eval(Task.delay(logger.info(s"Start interact with ${v._1}")))
+          address = v._1
+          state = v._2
+          Exchange(src, sink) = v._3
+          _ ← Process.eval(state.modify(c ⇒ c.copy(tracker = c.tracker + (address -> 0l))))
+          _ ← src chunk batchSize map { bs ⇒ serverBody(bs, v._2, v._1) } to sink
         } yield ()
       })(Strategy.Executor(S))
 
@@ -93,7 +99,7 @@ class ScalazNettyRequestNResponse1Spec extends Specification with ScalazNettyCon
           Exchange(src, sink) = transcodeUtf(exchange)
 
           out = (requestSrc(target) take n) ++ poison |> lift { b ⇒ logger.info(s"send for $target"); b } to sink
-          in = src observe (LoggerS) to io.fillBuffer(buf)
+          in = src /*observe (LoggerS)*/ to io.fillBuffer(buf)
 
           //_ ← (out tee in)(zipDeterministic(batchSize))
           //_ ← ((out zip naturals).wye(in)(bWye)(Strategy.Executor(C)))
@@ -107,13 +113,14 @@ class ScalazNettyRequestNResponse1Spec extends Specification with ScalazNettyCon
 
       //Start clients
       val r = Nondeterminism[Task]
-        .mapBoth(client("Bob", bufBob).run, client("Alice", bufAlice).run) { (l: Unit, r: Unit) ⇒ true }
+        .nmap3(client("Bob", bufBob).run, client("Alice", bufAlice).run, client("Jack", bufJack).run) { (l: Unit, r: Unit, th: Unit) ⇒ true }
         .attemptRun
 
       r must be equalTo \/-(true)
 
       bufBob.size must be equalTo iterationN
       bufAlice.size must be equalTo iterationN
+      bufJack.size must be equalTo iterationN
     }
   }
 }
