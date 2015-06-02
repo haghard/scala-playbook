@@ -6,19 +6,23 @@ import java.util.concurrent.{ ThreadFactory, Executors, CountDownLatch, TimeUnit
 
 import mongo.MongoProgram.NamedThreadFactory
 import monifu.reactive.Ack.{ Cancel, Continue }
+import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
 import rx.lang.scala.schedulers.NewThreadScheduler
 import scala.collection.mutable.Buffer
 import scala.concurrent.forkjoin.ThreadLocalRandom
 import scala.concurrent.{ ExecutionContext, Future }
 import scala.concurrent.duration.FiniteDuration
+import scala.reflect.ClassTag
 import scalaz.Scalaz._
 import scalaz.concurrent.{ Strategy, Task }
 import scala.language.higherKinds
 import scalaz.stream.Process._
-import scalaz.stream.{ process1, io }
+import scalaz.stream.io
 
 class GenericEffects extends Specification {
+
+  private val logger = Logger.getLogger("effects")
 
   import java.util.concurrent.atomic.{ AtomicReference ⇒ JavaAtomicReference }
 
@@ -51,58 +55,55 @@ class GenericEffects extends Specification {
 
   //Domain
   case class User(id: Long, name: String)
-  case class Address(street: String)
+  case class Address(street: String = "Baker Street 221Б")
 
-  def fetch[M[_]: Monad](userById: Long ⇒ M[User],
-                         addressByUser: User ⇒ M[Address])(id: Long): M[Address] =
+  def program[M[_]: Monad](getUserF: Long ⇒ M[User],
+                           getUserAddressF: User ⇒ M[Address],
+                           logF: String ⇒ M[Unit])(id: Long)(implicit t: ClassTag[M[_]]): M[Address] = {
+    /*getUserF(id) flatMap { user ⇒
+      getUserAddressF(user) flatMap { a ⇒
+        logF(s"[${t.runtimeClass.getName}] fetch address $a for user $user").map(_ ⇒ a)
+      }
+    }*/
     for {
-      user ← userById(id)
-      address ← addressByUser(user)
+      user ← getUserF(id)
+      address ← getUserAddressF(user)
+      _ ← logF(s"[${t.runtimeClass.getName}] fetch address $address for user $user")
     } yield address
+  }
 
   "Id monad effect" in {
-    val getUserById: Long ⇒ Id[User] =
-      id ⇒ User(id, "Sherlock")
+    val getUserF: Long ⇒ Id[User] = id ⇒ User(id, "Sherlock")
+    val getAddressF: User ⇒ Id[Address] = user ⇒ Address()
+    val logF: String ⇒ Id[Unit] = r ⇒ logger.info(r)
 
-    val gerAddressByUser: User ⇒ Id[Address] =
-      id ⇒ Address("Baker street")
-
-    fetch[Id](getUserById, gerAddressByUser)(99l) should be equalTo Address("Baker street")
+    program[Id](getUserF, getAddressF, logF)(99l) should be equalTo Address()
   }
 
   "Absent/Present value effect with Option" in {
-    (fetch[Option](
-      { id ⇒ Some(User(id, "Sherlock")) },
-      { user ⇒ Some(Address("Baker street")) })(99l)) should be equalTo Some(Address("Baker street"))
-  }
+    val getUserF: Long ⇒ Option[User] = id ⇒ Option(User(id, "Sherlock"))
+    val getAddressF: User ⇒ Option[Address] = user ⇒ Some(Address())
+    val logF: String ⇒ Option[Unit] = r ⇒ Option(logger.info(r))
 
-  "Success/Error value effect with Disjunction" in {
-    (fetch[({ type λ[x] = String \/ x })#λ](
-      { id ⇒ \/-(User(id, "Sherlock")) },
-      { user ⇒ -\/(s"Can't find street for user ${user.id}") })(99l)) should be equalTo -\/("Can't find street for user 99")
+    program[Option](getUserF, getAddressF, logF)(99l) should be equalTo Some(Address())
   }
 
   "Latency effect with Future" in {
-    val getUserById: Long ⇒ Future[User] =
-      id ⇒ Future(User(id, "Sherlock"))
-
-    val gerAddressByUser: User ⇒ Future[Address] =
-      id ⇒ Future(Address("Baker street"))
+    val getUserF: Long ⇒ Future[User] = id ⇒ Future(User(id, "Sherlock"))
+    val getAddressF: User ⇒ Future[Address] = id ⇒ Future(Address())
+    val logF: String ⇒ Future[Unit] = r ⇒ Future(logger.info(r))
 
     import scala.concurrent.Await
-    Await.result(fetch[Future](getUserById, gerAddressByUser)(99l),
-      new FiniteDuration(1, TimeUnit.SECONDS)) should be equalTo Address("Baker street")
+    Await.result(program[Future](getUserF, getAddressF, logF)(99l),
+      new FiniteDuration(1, TimeUnit.SECONDS)) should be equalTo Address()
   }
 
   "Concurrency effect with Task" in {
-    val getUserById: Long ⇒ Task[User] =
-      id ⇒ Task.now(User(id, "Sherlock"))
+    val getUserF: Long ⇒ Task[User] = id ⇒ Task.now(User(id, "Sherlock"))
+    val getAddressF: User ⇒ Task[Address] = id ⇒ Task.now(Address())
+    val logF: String ⇒ Task[Unit] = r ⇒ Task(logger.info(r))
 
-    val gerAddressByUser: User ⇒ Task[Address] =
-      id ⇒ Task.now(Address("Baker street"))
-
-    (fetch[Task](getUserById, gerAddressByUser)(99l))
-      .run should be equalTo Address("Baker street")
+    (program[Task](getUserF, getAddressF, logF)(99l)).run should be equalTo Address()
   }
 
   "Scalar or Vector response with monifu.Observable" in {
@@ -110,8 +111,9 @@ class GenericEffects extends Specification {
     import monifu.concurrent.Scheduler
 
     val P = Scheduler.computation(2)
-    implicit val C = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(2, namedTF("consumers")))
-    val seq = List(Address("Baker street 1"), Address("Baker street 2"), Address("Baker street 3"), Address("Baker street 4"))
+    implicit val C = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(2, namedTF("Consumer-thread")))
+    val seq = List(Address("Baker street 1"), Address("Baker street 2"),
+      Address("Baker street 3"), Address("Baker street 4"))
 
     val latch = new CountDownLatch(1)
     val register = new AtomicRegister(List[Address]())
@@ -121,23 +123,14 @@ class GenericEffects extends Specification {
       override def bind[A, B](fa: Observable[A])(f: (A) ⇒ Observable[B]): Observable[B] = fa flatMap f
     }
 
-    val getUserById: Long ⇒ Observable[User] = {
-      id ⇒
-        Observable.unit({
-          println(Thread.currentThread().getName + ": Observable producer User")
-          User(id, "Sherlock")
-        }).subscribeOn(P)
-    }
+    val getUserF: Long ⇒ Observable[User] = id ⇒ Observable.unit(User(id, "Sherlock")).subscribeOn(P)
+    val getAddressByUser: User ⇒ Observable[Address] = u ⇒ Observable.fromIterable(seq).subscribeOn(P)
+    val logF: String ⇒ Observable[Unit] = r ⇒ Observable.unit(logger.info(r))
 
-    val getAddressByUser: User ⇒ Observable[Address] = {
-      u ⇒
-        Observable.fromIterable(seq).subscribeOn(P)
-    }
-
-    (fetch[Observable](getUserById, getAddressByUser)(261l))
+    (program[Observable](getUserF, getAddressByUser, logF)(261l))
       .subscribe(new Observer[Address] {
         def onNext(elem: Address) = Future {
-          println(Thread.currentThread().getName + s": Observer consume $elem")
+          logF(s": Observer consume $elem")
           val results = register.transactAndGet { elem :: _ }
           if (results.size == 4) {
             latch.countDown()
@@ -146,10 +139,10 @@ class GenericEffects extends Specification {
         }(C)
 
         def onError(ex: scala.Throwable): scala.Unit = {
-          println("Error: " + ex.getMessage)
+          logF("Error: " + ex.getMessage)
           latch.countDown()
         }
-        def onComplete(): scala.Unit = println("onComplete")
+        def onComplete(): scala.Unit = {}
       })(P)
 
     latch.await()
@@ -158,21 +151,24 @@ class GenericEffects extends Specification {
 
   "Scalar or Vector response with rx.Observable" in {
     import rx.lang.scala.{ Observable ⇒ RxObservable }
+    import rx.lang.scala.Notification.{ OnError, OnCompleted, OnNext }
 
     val P = NewThreadScheduler()
     val register = new AtomicRegister(List[Address]())
     val latch = new CountDownLatch(1)
 
+    val logF: String ⇒ RxObservable[Unit] = r ⇒ RxObservable.just(logger.info(r))
+
     val getUserById: Long ⇒ RxObservable[User] =
       id ⇒ RxObservable.defer {
-        println(Thread.currentThread().getName + ": RxObservable producer getUserById")
+        logF("RxObservable producer getUserById")
         Thread.sleep(1000)
         RxObservable.just(User(id, "Sherlock"))
       }.subscribeOn(P)
 
     val getAddressByUser: User ⇒ RxObservable[Address] =
       user ⇒ RxObservable.defer {
-        println(Thread.currentThread().getName + ": RxObservable producer getAddressByUser")
+        logF("RxObservable producer getAddressByUser")
         RxObservable.from(Seq(Address("Baker street 1"), Address("Baker street 2")))
       }.subscribeOn(P)
 
@@ -181,14 +177,12 @@ class GenericEffects extends Specification {
       override def bind[A, B](fa: RxObservable[A])(f: (A) ⇒ RxObservable[B]): RxObservable[B] = fa flatMap f
     }
 
-    import rx.lang.scala.Notification.{ OnError, OnCompleted, OnNext }
-
-    (fetch[RxObservable](getUserById, getAddressByUser)(99l))
+    (program[RxObservable](getUserById, getAddressByUser, logF)(99l))
       .observeOn(rx.lang.scala.schedulers.ComputationScheduler())
       .materialize.subscribe { n ⇒
         n match {
           case OnNext(v) ⇒
-            println(Thread.currentThread().getName + ": RxObserver consume Address")
+            logF("RxObserver consume Address")
             register.transact { v :: _ }
           case OnCompleted  ⇒ latch.countDown
           case OnError(err) ⇒ println("Error: " + err.getMessage)
@@ -196,27 +190,26 @@ class GenericEffects extends Specification {
       }
 
     latch.await()
-    register.get.reverse should be equalTo Address("Baker street 1") :: Address("Baker street 2") :: Nil
+    register.get.size should be equalTo 2
   }
 
   "Scalar or Vector response with scalaz.Process" in {
     import scalaz.stream.Process
+
+    val seq = (1 to 100).toSeq
+    val buf = Buffer.empty[Address]
+
     val P = scalaz.stream.Process
     val parallelism = Runtime.getRuntime.availableProcessors() / 2
     val ioE = newFixedThreadPool(parallelism, new NamedThreadFactory("remote-process"))
 
-    val buf = Buffer.empty[Address]
-    val seq = (1 to 100).toSeq
-
     def resource(i: Int): Process[Task, Address] = P.eval(Task {
       Thread.sleep(ThreadLocalRandom.current().nextInt(100, 200)) // simulate blocking call
-      println(s"${Thread.currentThread().getName} - Process fetch address for $i")
       Address("Baker street " + i)
     }(ioE))
 
     def resource2(i: Int): Task[Address] = Task {
       Thread.sleep(ThreadLocalRandom.current().nextInt(100, 200)) // simulate blocking call
-      println(s"${Thread.currentThread().getName} - Process fetch address for $i")
       Address("Baker street" + i)
     }(ioE)
 
@@ -224,30 +217,30 @@ class GenericEffects extends Specification {
 
     val source2: Process[Task, Task[Address]] = emitAll(seq) map { resource2 _ }
 
-    val getUserById: (Long ⇒ Process[Task, User]) =
+    val getUserF: (Long ⇒ Process[Task, User]) =
       id ⇒ P.eval(Task {
         Thread.sleep(ThreadLocalRandom.current().nextInt(100, 200))
-        println(Thread.currentThread().getName + ": Process produce user")
         User(id, "Sherlock")
       }(ioE))
 
-    val getAddressByUser: (User ⇒ Process[Task, Address]) =
+    val getUserAddressF: (User ⇒ Process[Task, Address]) =
       user ⇒
         scalaz.stream.merge.mergeN(parallelism * 2)(source)(Strategy.Executor(ioE))
 
-    val getUnOrderedAddressByUser2: (User ⇒ Process[Task, Address]) =
+    val getUnOrderedAddressF2: (User ⇒ Process[Task, Address]) =
       user ⇒
         source2 gather parallelism
 
-    val getOrderedAddressByUser3: (User ⇒ Process[Task, Address]) =
+    val getOrderedAddressF3: (User ⇒ Process[Task, Address]) =
       user ⇒
         source2 sequence parallelism
 
-    val Proc = fetch[({ type λ[x] = Process[Task, x] })#λ](getUserById, getAddressByUser)(99l)
+    val logF: String ⇒ Process[Task, Unit] =
+      r ⇒ P.eval(Task.delay(logger.info(r)))
+
+    val Proc = program[({ type λ[x] = Process[Task, x] })#λ](getUserF, getUserAddressF, logF)(99l)
 
     val r = (Proc to io.fillBuffer(buf)).run.attemptRun
-
-    println(buf)
 
     r should be equalTo \/-(())
     seq.size should be equalTo buf.size
