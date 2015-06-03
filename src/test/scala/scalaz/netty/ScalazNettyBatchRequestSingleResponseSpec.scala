@@ -3,7 +3,6 @@ package netty
 
 import java.net.InetSocketAddress
 import java.util.concurrent.Executors._
-import monifu.concurrent.atomic.AtomicInt
 import org.specs2.mutable.Specification
 import scodec.bits.ByteVector
 
@@ -31,7 +30,7 @@ class ScalazNettyBatchRequestSingleResponseSpec extends Specification with Scala
       val bufAlice = Buffer.empty[String]
       val bufJack = Buffer.empty[String]
 
-      val doneSignals = async.signalOf(0)(Strategy.Executor(newFixedThreadPool(1, namedThreadFactory("signal"))))
+      val disconnectedClients = async.signalOf(0)(Strategy.Executor(newFixedThreadPool(1, namedThreadFactory("signal"))))
 
       def serverBody(batch: Vector[ByteVector], state: TaskVar[ServerState], address: InetSocketAddress) = {
         state.modify { c ⇒
@@ -44,8 +43,8 @@ class ScalazNettyBatchRequestSingleResponseSpec extends Specification with Scala
         Thread.sleep(500)
 
         if (batch(0).decodeUtf8.fold(ex ⇒ ex.getMessage, r ⇒ r) == PoisonPill) {
-          logger.info(s"kill message received")
-          doneSignals.compareAndSet(_.map(_ + 1)).run
+          logger.info(s"Disconnect client")
+          disconnectedClients.compareAndSet(_.map(_ + 1)).run
         }
         batch.reduce(_ ++ _)
       }
@@ -60,8 +59,8 @@ class ScalazNettyBatchRequestSingleResponseSpec extends Specification with Scala
           Exchange(src, sink) = v._3
           _ ← Process.eval(state.modify(c ⇒ c.copy(tracker = c.tracker + (address -> 0l))))
           e = (src.chunk(batchSize) map { bs ⇒ serverBody(bs, state, address) } to sink)
-          _ ← (doneSignals.discrete.map(x ⇒ if (x < clientSize) false else true)).wye(e)(wye.interrupt)(S)
-            .onComplete(P.eval_(throw new Exception("Server is down")))
+          _ ← (disconnectedClients.discrete.map(x ⇒ if (x < clientSize) false else true)).wye(e)(wye.interrupt)(S)
+            .onComplete(P.eval_(throw new Exception("All clients were disconnected")))
         } yield ()
       })(S)
 
