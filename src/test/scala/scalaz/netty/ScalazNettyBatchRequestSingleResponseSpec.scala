@@ -3,6 +3,7 @@ package netty
 
 import java.net.InetSocketAddress
 import java.util.concurrent.Executors._
+import monifu.concurrent.atomic.AtomicInt
 import org.specs2.mutable.Specification
 import scodec.bits.ByteVector
 
@@ -20,42 +21,49 @@ class ScalazNettyBatchRequestSingleResponseSpec extends Specification with Scala
   "Request(N) aggregated response server/client" should {
     "run with tee" in {
       val batchSize = 5
-      val iterationN = 11
-
+      val iterationN = 8
       val clientSize = 3
 
-      val S = newFixedThreadPool(4, namedThreadFactory("server"))
+      val ES = newFixedThreadPool(2, namedThreadFactory("server-body"))
       val C = newFixedThreadPool(clientSize, namedThreadFactory("client"))
 
       val bufBob = Buffer.empty[String]
       val bufAlice = Buffer.empty[String]
       val bufJack = Buffer.empty[String]
 
+      val doneSignals = async.signalOf(0)(Strategy.Executor(newFixedThreadPool(1, namedThreadFactory("signal"))))
+
       def serverBody(batch: Vector[ByteVector], state: TaskVar[ServerState], address: InetSocketAddress) = {
-        logger.info(s"Server receive: ${batch.map(_.decodeUtf8.fold(ex ⇒ ex.getMessage, r ⇒ r)).mkString(", ")}")
         state.modify { c ⇒
           c.copy(tracker = c.tracker + (address -> (c.tracker.getOrElse(address, 0l) + batch.size)))
         }.run
 
+        logger.info(s"Processing batch: ${batch.map(_.decodeUtf8.fold(ex ⇒ ex.getMessage, r ⇒ r)).mkString(", ")}")
+        //sleep should be before signal modification
+        //simulate processing
+        Thread.sleep(500)
+
         if (batch(0).decodeUtf8.fold(ex ⇒ ex.getMessage, r ⇒ r) == PoisonPill) {
           logger.info(s"kill message received")
-          if (state.read.run.tracker.keySet.size == clientSize)
-            throw new Exception("Stop command received")
+          doneSignals.compareAndSet(_.map(_ + 1)).run
         }
-
         batch.reduce(_ ++ _)
       }
 
-      val EchoGreetingServer = merge.mergeN(clientSize)(Netty.server(address)(S).map { v ⇒
+      val cfg = scalaz.netty.ServerConfig(true, clientSize, batchSize, true)
+      val S = Strategy.Executor(ES)
+      val EchoGreetingServer = merge.mergeN(clientSize)(Netty.server(address, cfg)(ES).map { v ⇒
         for {
-          _ ← Process.eval(Task.delay(logger.info(s"Start interact with ${v._1}")))
+          _ ← Process.eval(Task.delay(logger.info(s"Start interact with client from ${v._1}")))
           address = v._1
           state = v._2
           Exchange(src, sink) = v._3
           _ ← Process.eval(state.modify(c ⇒ c.copy(tracker = c.tracker + (address -> 0l))))
-          _ ← src chunk batchSize map { bs ⇒ serverBody(bs, v._2, v._1) } to sink
+          e = (src.chunk(batchSize) map { bs ⇒ serverBody(bs, state, address) } to sink)
+          _ ← (doneSignals.discrete.map(x ⇒ if (x < clientSize) false else true)).wye(e)(wye.interrupt)(S)
+            .onComplete(P.eval_(throw new Exception("Server is down")))
         } yield ()
-      })(Strategy.Executor(S))
+      })(S)
 
       def client(target: String, buf: Buffer[String]) = {
         /*val bWye = wye.dynamic(
@@ -99,12 +107,11 @@ class ScalazNettyBatchRequestSingleResponseSpec extends Specification with Scala
           Exchange(src, sink) = transcodeUtf(exchange)
 
           out = (requestSrc(target) take n) ++ poison |> lift { b ⇒ logger.info(s"send for $target"); b } to sink
-          in = src /*observe (LoggerS)*/ to io.fillBuffer(buf)
+          in = src observe (LoggerS) to io.fillBuffer(buf)
 
           //_ ← (out tee in)(zipDeterministic(batchSize))
           //_ ← ((out zip naturals).wye(in)(bWye)(Strategy.Executor(C)))
-          _ ← (out.wye(in)(nLeft(batchSize))(Strategy.Executor(C)))
-            .take((batchSize + 1) * iterationN + batchSize) // for correct client exit
+          _ ← (out.wye(in)(nLeft(batchSize))(Strategy.Executor(C))).take((batchSize + 1) * iterationN + batchSize)
         } yield ()
       }
 
@@ -112,8 +119,8 @@ class ScalazNettyBatchRequestSingleResponseSpec extends Specification with Scala
       EchoGreetingServer.run.runAsync(_ ⇒ ())
 
       //Start clients
-      val r = Nondeterminism[Task]
-        .nmap3(client("Bob", bufBob).run, client("Alice", bufAlice).run, client("Jack", bufJack).run) { (l: Unit, r: Unit, th: Unit) ⇒ true }
+      val r = Nondeterminism[Task].nmap3(client("Bob", bufBob).run,
+        client("Alice", bufAlice).run, client("Jack", bufJack).run) { (l: Unit, r: Unit, th: Unit) ⇒ true }
         .attemptRun
 
       r must be equalTo \/-(true)

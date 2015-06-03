@@ -18,34 +18,30 @@ import scalaz.Scalaz._
 import scalaz.concurrent.{ Strategy, Task }
 import scala.language.higherKinds
 import scalaz.stream.Process._
-import scalaz.stream.io
+import scalaz.stream.{ process1, Process, io }
 
 class GenericEffects extends Specification {
+  val P = scalaz.stream.Process
 
   private val logger = Logger.getLogger("effects")
 
   import java.util.concurrent.atomic.{ AtomicReference ⇒ JavaAtomicReference }
 
   final class AtomicRegister[A](init: A) extends JavaAtomicReference[A](init) {
-    final def transact(f: A ⇒ A): Unit = {
-      @annotation.tailrec
-      def attempt: A = {
-        val current = get
-        val updated = f(current)
-        if (compareAndSet(current, updated)) updated else attempt
-      }
-      attempt
+
+    @annotation.tailrec
+    def attempt(f: A ⇒ A): A = {
+      val current = get
+      val updated = f(current)
+      if (compareAndSet(current, updated)) updated else attempt(f)
     }
 
-    final def transactAndGet(f: A ⇒ A): A = {
-      @annotation.tailrec
-      def attempt: A = {
-        val current = get
-        val updated = f(get)
-        if (compareAndSet(current, updated)) updated else attempt
-      }
-      attempt
+    final def transact(f: A ⇒ A): Unit = {
+      attempt(f)
+      ()
     }
+
+    final def transactAndGet(f: A ⇒ A): A = attempt(f)
   }
 
   def namedTF(name: String) = new ThreadFactory {
@@ -111,9 +107,8 @@ class GenericEffects extends Specification {
     import monifu.concurrent.Scheduler
 
     val P = Scheduler.computation(2)
-    implicit val C = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(2, namedTF("Consumer-thread")))
-    val seq = List(Address("Baker street 1"), Address("Baker street 2"),
-      Address("Baker street 3"), Address("Baker street 4"))
+    implicit val C = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(2, namedTF("consumer")))
+    val seq = List(Address(), Address(), Address(), Address())
 
     val latch = new CountDownLatch(1)
     val register = new AtomicRegister(List[Address]())
@@ -199,7 +194,6 @@ class GenericEffects extends Specification {
     val seq = (1 to 100).toSeq
     val buf = Buffer.empty[Address]
 
-    val P = scalaz.stream.Process
     val parallelism = Runtime.getRuntime.availableProcessors() / 2
     val ioE = newFixedThreadPool(parallelism, new NamedThreadFactory("remote-process"))
 
@@ -227,20 +221,20 @@ class GenericEffects extends Specification {
       user ⇒
         scalaz.stream.merge.mergeN(parallelism * 2)(source)(Strategy.Executor(ioE))
 
-    val getUnOrderedAddressF2: (User ⇒ Process[Task, Address]) =
+    val getUnOrderedAddress2: (User ⇒ Process[Task, Address]) =
       user ⇒
         source2 gather parallelism
 
-    val getOrderedAddressF3: (User ⇒ Process[Task, Address]) =
+    val getOrderedAddress3: (User ⇒ Process[Task, Address]) =
       user ⇒
         source2 sequence parallelism
 
     val logF: String ⇒ Process[Task, Unit] =
       r ⇒ P.eval(Task.delay(logger.info(r)))
 
-    val Proc = program[({ type λ[x] = Process[Task, x] })#λ](getUserF, getUserAddressF, logF)(99l)
+    val Prog = program[({ type λ[x] = Process[Task, x] })#λ](getUserF, getUserAddressF, logF)(99l)
 
-    val r = (Proc to io.fillBuffer(buf)).run.attemptRun
+    val r = (Prog to io.fillBuffer(buf)).run.attemptRun
 
     r should be equalTo \/-(())
     seq.size should be equalTo buf.size

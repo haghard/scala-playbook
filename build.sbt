@@ -21,7 +21,7 @@ version := "0.0.1-SNAPSHOT"
 scalaVersion := "2.11.6"
 
 val Akka = "2.4-M1" //"2.3.11"
-val Doobie = "0.2.2-SNAPSHOT"
+val Doobie = "0.2.2"
 
 parallelExecution in Test := false
 
@@ -53,8 +53,14 @@ libraryDependencies ++= Seq(
     "io.reactivex"        %% "rxscala"             % "0.24.1",
     "org.monifu"          %% "monifu"              % "1.0-M1",
     "log4j"               %  "log4j"               % "1.2.14",
-    "org.scalaz.netty"    %% "scalaz-netty"        % "0.2.1", //version from my fork and locally builded
+    "org.scalaz.netty"    %% "scalaz-netty"        % "0.2.1",
     "org.scodec"          %% "scodec-stream"       % "0.9.0"
+)
+
+libraryDependencies ++= Seq(
+  "org.tpolecat"        %% "doobie-core"         % Doobie,
+  "org.tpolecat"        %% "doobie-contrib-h2"   % Doobie,
+  "org.tpolecat"        %% "doobie-contrib-hikari" % Doobie
 )
 
 
