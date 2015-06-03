@@ -25,10 +25,7 @@ class TaskSpec extends Specification {
           for {
             x ← fib(n - 1)
             y ← fib(n - 2)
-          } yield {
-            logger.info(s"${Thread.currentThread.getName}")
-            x + y
-          }
+          } yield (x + y)
       }
       //run/attemptRun is like get on Future
       fib(15).attemptRun should be equalTo \/-(987)
@@ -119,15 +116,15 @@ class TaskSpec extends Specification {
         executor ← reader //delegate
         pair ← Nondeterminism[Task].both(
           Task {
-            println(Thread.currentThread().getName + "X start")
+            logger.info("X start")
             Thread.sleep(2000)
-            println(Thread.currentThread().getName + "X stop")
+            logger.info("X stop")
             Thread.currentThread().getName + "-x"
           }(executor),
           Task {
-            println(Thread.currentThread().getName + "Y start")
+            logger.info("Y start")
             Thread.sleep(1000)
-            println(Thread.currentThread().getName + "Y stop")
+            logger.info("Y stop")
             Thread.currentThread().getName + "-y"
           }(executor)
         ).kleisliR //kleisli

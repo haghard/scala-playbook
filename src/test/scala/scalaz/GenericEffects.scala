@@ -18,17 +18,14 @@ import scalaz.Scalaz._
 import scalaz.concurrent.{ Strategy, Task }
 import scala.language.higherKinds
 import scalaz.stream.Process._
-import scalaz.stream.{ process1, Process, io }
+import scalaz.stream.io
+import java.util.concurrent.atomic.{ AtomicReference ⇒ JavaAtomicReference }
 
 class GenericEffects extends Specification {
   val P = scalaz.stream.Process
-
-  private val logger = Logger.getLogger("effects")
-
-  import java.util.concurrent.atomic.{ AtomicReference ⇒ JavaAtomicReference }
+  val logger = Logger.getLogger("effects")
 
   final class AtomicRegister[A](init: A) extends JavaAtomicReference[A](init) {
-
     @annotation.tailrec
     def attempt(f: A ⇒ A): A = {
       val current = get
@@ -36,12 +33,12 @@ class GenericEffects extends Specification {
       if (compareAndSet(current, updated)) updated else attempt(f)
     }
 
-    final def transact(f: A ⇒ A): Unit = {
+    def transact(f: A ⇒ A): Unit = {
       attempt(f)
       ()
     }
 
-    final def transactAndGet(f: A ⇒ A): A = attempt(f)
+    def transactAndGet(f: A ⇒ A): A = attempt(f)
   }
 
   def namedTF(name: String) = new ThreadFactory {
@@ -51,16 +48,16 @@ class GenericEffects extends Specification {
 
   //Domain
   case class User(id: Long, name: String)
-  case class Address(street: String = "Baker Street 221Б")
+  case class Address(street: String = "Baker Street 221B")
 
-  def program[M[_]: Monad](getUserF: Long ⇒ M[User],
-                           getUserAddressF: User ⇒ M[Address],
-                           logF: String ⇒ M[Unit])(id: Long)(implicit t: ClassTag[M[_]]): M[Address] = {
-    /*getUserF(id) flatMap { user ⇒
+  /*getUserF(id) flatMap { user ⇒
       getUserAddressF(user) flatMap { a ⇒
         logF(s"[${t.runtimeClass.getName}] fetch address $a for user $user").map(_ ⇒ a)
       }
-    }*/
+  }*/
+  def program[M[_]: Monad](getUserF: Long ⇒ M[User],
+                           getUserAddressF: User ⇒ M[Address],
+                           logF: String ⇒ M[Unit])(id: Long)(implicit t: ClassTag[M[_]]): M[Address] = {
     for {
       user ← getUserF(id)
       address ← getUserAddressF(user)
@@ -157,7 +154,6 @@ class GenericEffects extends Specification {
     val getUserById: Long ⇒ RxObservable[User] =
       id ⇒ RxObservable.defer {
         logF("RxObservable producer getUserById")
-        Thread.sleep(1000)
         RxObservable.just(User(id, "Sherlock"))
       }.subscribeOn(P)
 
@@ -238,5 +234,29 @@ class GenericEffects extends Specification {
 
     r should be equalTo \/-(())
     seq.size should be equalTo buf.size
+  }
+
+  "Writer monad for testing" in {
+    val id = 199l
+    type W[X] = Writer[Map[String, String], X]
+
+    val getUserF: Long ⇒ W[User] =
+      id ⇒ {
+        val u = User(id, "Sherlock")
+        u.set(Map("user" -> u.name))
+      }
+
+    val getAddressF: User ⇒ W[Address] =
+      user ⇒ {
+        val a = Address()
+        a.set(Map("address" -> a.street))
+      }
+
+    val logF: String ⇒ W[Unit] = r ⇒ logger.info(r).point[W]
+
+    val rMap = program[W](getUserF, getAddressF, logF)(id).run._1
+
+    rMap("user") === "Sherlock"
+    rMap("address") === Address().street
   }
 }
