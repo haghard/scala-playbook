@@ -70,7 +70,6 @@ class ConcurrencySpec extends Specification {
 
     val r = io(bob, alice).unsafePerformIO() // must_== (alice, bob)
 
-    println(r)
     //check for reference equality
     (bob eq r._2) === true
     (alice eq r._1) === true
