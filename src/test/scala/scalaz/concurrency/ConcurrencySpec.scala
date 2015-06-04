@@ -2,8 +2,6 @@ package scalaz.concurrency
 
 import java.util.concurrent.Executors._
 
-import com.twitter.concurrent.Offer
-import com.twitter.util.Updatable
 import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
@@ -49,7 +47,6 @@ class ConcurrencySpec extends Specification {
       bRef ← newEmptyMVar[Foo]
       aRef ← newEmptyMVar[Foo]
 
-      //writes in separate thread
       _ ← forkIO {
         for {
           _ ← aRef.put(bob)
@@ -57,8 +54,7 @@ class ConcurrencySpec extends Specification {
           u = logger.info(s"do write")
         } yield ()
       }
-      //memory barrier
-      //all writes should be visible
+
       newBob ← bRef.take
       newAlice ← aRef.take
       _ ← putStrLn(s"after bob's become: $newBob")
