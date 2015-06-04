@@ -45,7 +45,7 @@ resolvers += "octalmind"             at "https://dl.bintray.com/guillaumebreton/
 //"org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5.1" exclude ("org.specs2", "*"),
 libraryDependencies ++= Seq(
     "org.mongodb"         %  "mongo-java-driver"   %  "2.13.0"  withSources(),
-    "org.scalaz.stream"   %% "scalaz-stream"       %  "0.7a"    withSources(),
+    "org.scalaz.stream"   %% "scalaz-stream"       %  "0.7.1a"    withSources(),
     "com.typesafe.akka"   %% "akka-actor"          %  Akka      withSources(),
     "com.typesafe.akka"   %% "akka-testkit"        %  Akka,
     "com.typesafe.akka"   %% "akka-stream-experimental" % "1.0-RC3",
@@ -54,7 +54,8 @@ libraryDependencies ++= Seq(
     "org.monifu"          %% "monifu"              % "1.0-M1",
     "log4j"               %  "log4j"               % "1.2.14",
     "org.scalaz.netty"    %% "scalaz-netty"        % "0.2.1",
-    "org.scodec"          %% "scodec-stream"       % "0.9.0"
+    "org.scodec"          %% "scodec-stream"       % "0.9.0",
+    "com.twitter"         %% "util-core"           % "6.23.0"
 )
 
 libraryDependencies ++= Seq(

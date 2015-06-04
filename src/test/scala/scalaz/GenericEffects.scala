@@ -55,6 +55,7 @@ class GenericEffects extends Specification {
         logF(s"[${t.runtimeClass.getName}] fetch address $a for user $user").map(_ ⇒ a)
       }
   }*/
+  //Function Composition with Effects
   def program[M[_]: Monad](getUserF: Long ⇒ M[User],
                            getUserAddressF: User ⇒ M[Address],
                            logF: String ⇒ M[Unit])(id: Long)(implicit t: ClassTag[M[_]]): M[Address] = {
