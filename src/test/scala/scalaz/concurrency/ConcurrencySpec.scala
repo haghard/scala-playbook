@@ -1,6 +1,7 @@
 package scalaz.concurrency
 
 import java.util.concurrent.Executors._
+import java.util.concurrent.atomic.AtomicInteger
 
 import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
@@ -18,7 +19,6 @@ class ConcurrencySpec extends Specification {
   implicit val P = Strategy.Executor(pool)
 
   case class Foo(name: String)
-
   def forkIO(f: ⇒ IO[Unit])(implicit s: Strategy): IO[Unit] = IO { s(f.unsafePerformIO); () }
 
   "MVar" should {
@@ -37,7 +37,6 @@ class ConcurrencySpec extends Specification {
         b ← in.take
         u = logger.info(s"perform take")
       } yield (a, b)
-
       run.unsafePerformIO must_== (Foo("aliceV1"), Foo("aliceV2"))
     }
   }
@@ -101,44 +100,42 @@ class ConcurrencySpec extends Specification {
     1 === 1
   }
 
-  "Observer for 2 Vars" should {
+  "Observe Vars changes" should {
     "have observed only after pair update" in {
       import com.twitter.util.Var
       import com.twitter.util.Updatable
+      val N = 100
+      val a, b = Var(0)
 
-      class Counter(n: Int, u: Updatable[Int], sleep: Long) extends Thread {
+      class Counter(n: Int, limit: Int, u: Updatable[Int], sleep: Long) extends Thread {
         override def run() {
           var i = 1
-          while (i < n) {
+          while (i < limit) {
             u.update(i)
-            logger.info(s"update Var $i")
-
+            logger.info(s"$n update local var $i")
             i += 1
             Thread.sleep(sleep)
           }
         }
       }
 
-      val N = 100
-      val a, b = Var(0)
       val c = a.flatMap(_ ⇒ b)
-
-      @volatile var j = -1
+      val acc = new AtomicInteger(-1)
       c.observe { i ⇒
         logger.info(s"update notification $i")
-        assert(i === j + 1)
-        j = i
+        assert(i === acc.get() + 1)
+        acc.set(i)
       }
 
-      val ac = new Counter(N, a, 50)
-      val bc = new Counter(N, b, 70)
+      val ac = new Counter(0, N, a, 50)
+      val bc = new Counter(1, N, b, 70)
 
       ac.start()
       bc.start()
       ac.join()
       bc.join()
 
-      j === N - 1
+      acc.get === N - 1
     }
   }
 }

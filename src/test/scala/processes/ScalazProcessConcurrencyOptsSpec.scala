@@ -16,7 +16,7 @@ import scalaz.concurrent.{ Strategy, Task }
 class ScalazProcessConcurrencyOptsSpec extends Specification {
   val P = scalaz.stream.Process
 
-  private val logger = Logger.getLogger("proc-binding")
+  val logger = Logger.getLogger("proc-binding")
 
   "Binding to asynchronous sources" should {
     "non-deterministic interleave of both streams through merge/either" in {
@@ -86,6 +86,47 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
         .runAsync(sync.put)
 
       sync.get should be equalTo (\/-(IndexedSeq(sum)))
+    }
+  }
+
+  "Parallel map-reduce through queue" should {
+    "word count with monoid" in {
+      import scalaz._
+      import Scalaz._
+      val PLogger = Logger.getLogger("map-reduce")
+
+      //identity op(a, zero) == a
+      //associativity op(op(a,b),c) == op(a, op(b,c))
+
+      val mSize = Runtime.getRuntime.availableProcessors / 2
+      val q = async.boundedQueue[String](mSize * mSize)
+      implicit val S =
+        Strategy.Executor(newFixedThreadPool(mSize, new NamedThreadFactory("map-reduce")))
+
+      val inWords: Process[Task, String] =
+        P.emitAll(Seq("A A", "A", "B", "C", "B", "C", "C", "B", "B", "C", "B", "C", "C A", "B", "B", "C", "B", "C", "C", "B", "B A"))
+
+      val qWriter: Process[Task, Unit] =
+        (inWords to q.enqueue)
+          .drain.onComplete(Process.eval_ { PLogger.info("All input was scheduled. Close queue"); q.close })
+
+      val mappers: Process[Task, Process[Task, Map[String, Int]]] =
+        P.range(0, mSize) map { i ⇒
+          PLogger.info(s"Start mapper process №$i")
+          q.dequeue.map { line ⇒
+            val m = line.split(" ").toList.foldMap(i ⇒ Map(i -> 1))
+            PLogger.info(s"Mapper input: $line  out: $m")
+            m
+          }
+        }
+
+      val out: IndexedSeq[Map[String, Int]] =
+        (qWriter.drain merge scalaz.stream.merge.mergeN(mSize)(mappers)(S).foldMonoid).runLog.run
+
+      out.size === 1
+      out(0)("B") === 10
+      out(0)("C") === 9
+      out(0)("A") === 5
     }
   }
 }
