@@ -40,15 +40,15 @@ package object modules {
    * You might be wondering why we need this T as a subtype for OptionSig,
    * as this is usually not needed for typeclasses.
    * It's because we need to be able to project its inner types.
-   *
+   * Catamorphism over the OptionTypes
    */
-  abstract class OptionOps[T <: OptionTypes] {
+  abstract class Catamorphism[T <: OptionTypes] {
 
     def some[A](x: A): T#Some[A]
 
     def none: T#None
 
-    def fold[A, B](opt: T#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B
+    def cata[A, B](opt: T#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B
   }
 
   /**
@@ -57,34 +57,34 @@ package object modules {
    * if it is available:
    *
    */
-  object OptionOps {
-    def apply[T <: OptionTypes](implicit ops: OptionOps[T]): OptionOps[T] = ops
+  object Catamorphism {
+    def apply[T <: OptionTypes](implicit ops: Catamorphism[T]): Catamorphism[T] = ops
   }
 
   /**
    *
-   * OptionShow[T <: OptionSig : OptionOps] means that OptionShow is parameterized by a T,
-   * which is required to be a subtype of OptionSig.
-   * Also an instance of OptionOps[T] must be implicitly available.
+   * OptionShow[T <: OptionTypes : Catamorphism] means that OptionShow is parameterized by a T,
+   * which is required to be a subtype of OptionTypes.
+   * Also an instance of Catamorphism[T] must be implicitly available.
    *
    */
   import scalaz.Show
-  final class OptionShow[T <: OptionTypes: OptionOps] {
+  final class OptionShow[T <: OptionTypes: Catamorphism] {
 
     def optionShow[A: Show]: Show[T#Option[A]] = {
       // retrieving the typeclass instances
       val showA = Show[A]
-      val ops = OptionOps[T]
+      val ops = Catamorphism[T]
 
       new Show[T#Option[A]] {
-        override def shows(opt: T#Option[A]): String = ops.fold(opt)("none", x ⇒
+        override def shows(opt: T#Option[A]): String = ops.cata(opt)("none", x ⇒
           s"some(${showA.shows(x)})")
       }
     }
   }
 
   object OptionShow {
-    implicit def apply[T <: OptionTypes: OptionOps]: OptionShow[T] = new OptionShow[T]
+    implicit def apply[T <: OptionTypes: Catamorphism]: OptionShow[T] = new OptionShow[T]
   }
 
   trait ScalaOption extends OptionTypes {
@@ -94,13 +94,13 @@ package object modules {
   }
 
   object ScalaOption {
-    implicit object ops extends OptionOps[ScalaOption] {
+    implicit object cata extends Catamorphism[ScalaOption] {
 
       def some[A](x: A): ScalaOption#Some[A] = scala.Some(x)
 
       val none: ScalaOption#None = scala.None
 
-      def fold[A, B](opt: ScalaOption#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B =
+      def cata[A, B](opt: ScalaOption#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B =
         opt match {
           case scala.None    ⇒ ifNone
           case scala.Some(x) ⇒ ifSome(x)
@@ -122,13 +122,13 @@ package object modules {
 
   object MyOption extends OptionTypes {
 
-    implicit object ops extends OptionOps[MyOption] {
+    implicit object ops extends Catamorphism[MyOption] {
 
       def some[A](x: A): MyOption#Some[A] = scala0.Some(x)
 
       val none: MyOption#None = scala0.None
 
-      def fold[A, B](opt: MyOption#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B =
+      def cata[A, B](opt: MyOption#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B =
         opt match {
           case scala0.None    ⇒ ifNone
           case scala0.Some(x) ⇒ ifSome(x)
@@ -144,13 +144,13 @@ package object modules {
 
   object NullOption {
 
-    implicit object ops extends OptionOps[NullOption] {
+    implicit object ops extends Catamorphism[NullOption] {
 
       def some[A](x: A): NullOption#Some[A] = x
 
       val none: NullOption#None = null
 
-      def fold[A, B](opt: NullOption#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B = {
+      def cata[A, B](opt: NullOption#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B = {
         if (opt == null) ifNone
         else ifSome(opt.asInstanceOf[A])
       }
@@ -165,13 +165,13 @@ package object modules {
   }
 
   object Java8Option {
-    implicit object ops extends OptionOps[Java8Option] {
+    implicit object ops extends Catamorphism[Java8Option] {
 
       def some[A](x: A): Java8Option#Some[A] = java.util.Optional.of(x)
 
       val none: Java8Option#None = java.util.Optional.empty()
 
-      def fold[A, B](opt: Java8Option#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B = {
+      def cata[A, B](opt: Java8Option#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B = {
         import java.util.function.{ Function ⇒ F, Supplier }
         def f = new F[A, B] { def apply(a: A): B = ifSome(a) }
         def supplier = new Supplier[B] { def get(): B = ifNone }
@@ -180,9 +180,9 @@ package object modules {
     }
   }
 
-  class Program[T <: OptionTypes: OptionOps](implicit tag: ClassTag[T]) {
+  class Program[T <: OptionTypes: Catamorphism](implicit tag: ClassTag[T]) {
     private val logger = Logger.getLogger(classOf[Program[T]])
-    private val ops = OptionOps[T]
+    private val ops = Catamorphism[T]
 
     // a little dance to derive our Show instance
     import scalaz.std.anyVal.intInstance
@@ -198,10 +198,9 @@ package object modules {
       val optNone = ops.some(ops.none)
 
       import showOptInt.showSyntax.ToShowOps
-
       logger.info("optSome: " + ToShowOps(optSome).shows)
       logger.info("optNone: " + ToShowOps(optNone).shows)
-      logger.info("***************************")
+      logger.info("*************************************")
     }
   }
 }

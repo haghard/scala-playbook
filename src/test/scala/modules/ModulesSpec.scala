@@ -6,11 +6,10 @@ class ModulesSpec extends Specification {
 
   "Program with var options" should {
     "run" in {
-
       object MainWithScalaOption extends Program[ScalaOption]
-      object MainWithMyOption extends Program[MyOption]
       object MainWithNullOption extends Program[NullOption]
       object MainWithJava8Option extends Program[Java8Option]
+      object MainWithMyOption extends Program[MyOption]
 
       MainWithScalaOption.run()
       MainWithMyOption.run()

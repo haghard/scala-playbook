@@ -117,4 +117,62 @@ class ScalazTypeClassesSpec extends Specification {
         .run(0)._1 should be equalTo 12
     }
   }
+
+  "Option as Apply" should {
+    "Apply  <*>, *>, <* operator" in {
+      //Usefull when you want return error when it occurs
+
+      val s: scala.Option[Int] = scalaz.Scalaz.none
+      1.point[Option].map(_ + 2) === Some(3)
+
+      //<* take left hand side and discard left if they both successes
+      1.some <* 2.some === Some(1)
+      1.some *> 2.some === Some(2)
+
+      //take left
+      scalaz.Scalaz.none[Int] <* 1.some === None
+
+      //take left if they are both successes, but they are not
+      1.some <* scalaz.Scalaz.none[Int] === None
+      //*> take right if they are both successes, but they are not
+      scalaz.Scalaz.none[Int] *> 1.some === None
+
+      //take left if they are both successes, but they are not
+      scalaz.Scalaz.none[Int] *> 2.some == Some(1)
+
+      val f = { x: Int ⇒ x + 3 }.point[Option]
+      val f1 = 9.some <*> ((x: Int, y: Int) ⇒ x + y).curried.some
+
+      9.some.<*>(f) === Some(9)
+      3.some.<*>(f1) === Some(12)
+    }
+
+    "Applicative builders" in {
+      ^(3.some, 5.some)(_ + _) === Some(8)
+      //or
+      (3.some |@| 5.some)(_ + _) === Some(8)
+
+      ^(3.some, scalaz.Scalaz.none[Int])(_ + _) === None
+
+      (List("hi", "hello") |@| List("?", "!"))(_ + _) === List("hi?", "hi!", "hello?", "hello!")
+    }
+
+    "Sequence" in {
+      List(1.some, 2.some).sequence === Some(List(1, 2))
+    }
+
+    "Traverse" in {
+      List(1.some, 2.some).traverse(_.map(_ * 2)) === Some(List(2, 4))
+    }
+
+    "TraverseS" in {
+      val r = List(1, 2).traverseS { x: Int ⇒
+        State { y: Int ⇒ ((x * y), x) }
+      }
+
+      val ans = r.run(5)
+      ans._1 === 10 //(1*5)*2
+      ans._2 === List(1, 2)
+    }
+  }
 }
