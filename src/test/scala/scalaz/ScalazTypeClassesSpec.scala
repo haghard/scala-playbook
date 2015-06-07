@@ -9,14 +9,14 @@ object ScalazTypeClassesSpec {
 
   implicit class NumericAlgebraOps[T](val v: T) extends AnyVal {
 
-    def plus[F[_]](M: F[T])(implicit f: Functor[F], num: Numeric[T]): F[T] =
-      f.map(M)(num.plus(_, v))
+    def plus[F[_]: Functor](M: F[T])(implicit num: Numeric[T]): F[T] =
+      M.map(num.plus(_, v))
 
-    def minis[F[_]](M: F[T])(implicit f: Functor[F], num: Numeric[T]): F[T] =
-      f.map(M)(num.minus(_, v))
+    def minis[F[_]: Functor](M: F[T])(implicit num: Numeric[T]): F[T] =
+      M.map(num.minus(_, v))
 
-    def multiply[F[_]](M: F[T])(implicit f: Functor[F], num: Numeric[T]): F[T] =
-      f.map(M)(num.times(_, v))
+    def multiply[F[_]: Functor](M: F[T])(implicit num: Numeric[T]): F[T] =
+      M.map(num.times(_, v))
 
     def plusM[F[_]: Monad](M: F[T])(implicit num: Numeric[T]): F[T] =
       M.map(num.plus(_, v))
