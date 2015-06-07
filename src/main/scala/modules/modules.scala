@@ -159,7 +159,7 @@ package object modules {
     }
   }
 
-  class Program[T <: Options: Catamorphism](implicit tag: ClassTag[T]) {
+  private[modules] class Program[T <: Options: Catamorphism](implicit tag: ClassTag[T]) {
     private val logger = Logger.getLogger(classOf[Program[T]])
     private val ops = Catamorphism[T]
 
