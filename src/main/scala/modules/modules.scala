@@ -1,5 +1,4 @@
 import org.apache.log4j.Logger
-
 import scala.reflect.ClassTag
 
 //http://io.pellucid.com/blog/abstract-algebraic-data-type
@@ -21,14 +20,14 @@ package object modules {
   /**
    *
    * This is just a convenient way to gather several types into a single one, a bit like a record, but for types.
-   * Given an OptionSignature, we can now speak about one of the types it contains
-   * using a type projection, eg. OptionSignature#Option[A].
+   * Given an Options, we can now speak about one of the types it contains
+   * using a type projection, eg. OptionTypes#Option[A].
    *
    *
    * Abstracting over types
    *
    */
-  trait OptionTypes {
+  trait Options {
     type Option[+_]
     type Some[+A] <: Option[A]
     type None <: Option[Nothing]
@@ -37,44 +36,39 @@ package object modules {
   /**
    *
    * Abstracting over methods
-   * You might be wondering why we need this T as a subtype for OptionSig,
+   * You might be wondering why we need this T as a subtype for Options,
    * as this is usually not needed for typeclasses.
    * It's because we need to be able to project its inner types.
-   * Catamorphism over the OptionTypes
+   * Catamorphism over the Options
    */
-  abstract class Catamorphism[T <: OptionTypes] {
-
+  abstract class Catamorphism[T <: Options] {
     def some[A](x: A): T#Some[A]
-
     def none: T#None
-
     def cata[A, B](opt: T#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B
   }
 
   /**
    *
-   * Let's define a helper to retrieve an instance of OptionOps[Sig] given a signature,
-   * if it is available:
-   *
+   * Let's define a helper to retrieve an instance of Catamorphism[Options] given a signature,
+   * if it is available
    */
   object Catamorphism {
-    def apply[T <: OptionTypes](implicit ops: Catamorphism[T]): Catamorphism[T] = ops
+    def apply[T <: Options](implicit ops: Catamorphism[T]): Catamorphism[T] = ops
   }
 
   /**
    *
-   * OptionShow[T <: OptionTypes : Catamorphism] means that OptionShow is parameterized by a T,
-   * which is required to be a subtype of OptionTypes.
+   * OptionShow[T <: Options : Catamorphism] means that OptionShow is parameterized by a T,
+   * which is required to be a subtype of Options.
    * Also an instance of Catamorphism[T] must be implicitly available.
    *
    */
   import scalaz.Show
-  final class OptionShow[T <: OptionTypes: Catamorphism] {
-
+  final class OptionShow[T <: Options: Catamorphism] {
     def optionShow[A: Show]: Show[T#Option[A]] = {
       // retrieving the typeclass instances
       val showA = Show[A]
-      val ops = Catamorphism[T]
+      val ops = Catamorphism.apply[T]
 
       new Show[T#Option[A]] {
         override def shows(opt: T#Option[A]): String = ops.cata(opt)("none", x ⇒
@@ -84,10 +78,10 @@ package object modules {
   }
 
   object OptionShow {
-    implicit def apply[T <: OptionTypes: Catamorphism]: OptionShow[T] = new OptionShow[T]
+    implicit def apply[T <: Options: Catamorphism]: OptionShow[T] = new OptionShow[T]
   }
 
-  trait ScalaOption extends OptionTypes {
+  trait ScalaOption extends Options {
     type Option[+A] = scala.Option[A]
     type Some[+A] = scala.Some[A]
     type None = scala.None.type
@@ -95,12 +89,9 @@ package object modules {
 
   object ScalaOption {
     implicit object cata extends Catamorphism[ScalaOption] {
-
-      def some[A](x: A): ScalaOption#Some[A] = scala.Some(x)
-
-      val none: ScalaOption#None = scala.None
-
-      def cata[A, B](opt: ScalaOption#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B =
+      override def some[A](x: A): ScalaOption#Some[A] = scala.Some(x)
+      override val none: ScalaOption#None = scala.None
+      override def cata[A, B](opt: ScalaOption#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B =
         opt match {
           case scala.None    ⇒ ifNone
           case scala.Some(x) ⇒ ifSome(x)
@@ -114,21 +105,17 @@ package object modules {
     case object None extends Option[Nothing]
   }
 
-  trait MyOption extends OptionTypes {
+  trait ScalaOption2 extends Options {
     type Option[+A] = scala0.Option[A]
     type Some[+A] = scala0.Some[A]
     type None = scala0.None.type
   }
 
-  object MyOption extends OptionTypes {
-
-    implicit object ops extends Catamorphism[MyOption] {
-
-      def some[A](x: A): MyOption#Some[A] = scala0.Some(x)
-
-      val none: MyOption#None = scala0.None
-
-      def cata[A, B](opt: MyOption#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B =
+  object ScalaOption2 extends Options {
+    implicit object cata extends Catamorphism[ScalaOption2] {
+      override def some[A](x: A): ScalaOption2#Some[A] = scala0.Some(x)
+      override val none: ScalaOption2#None = scala0.None
+      override def cata[A, B](opt: ScalaOption2#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B =
         opt match {
           case scala0.None    ⇒ ifNone
           case scala0.Some(x) ⇒ ifSome(x)
@@ -136,42 +123,34 @@ package object modules {
     }
   }
 
-  trait NullOption extends OptionTypes {
-    type Option[+A] = Any
-    type Some[+A] = Any
-    type None = Null
+  trait NullableOption extends Options {
+    type Option[+A] = scala.Any
+    type Some[+A] = scala.Any
+    type None = scala.Null
   }
 
-  object NullOption {
-
-    implicit object ops extends Catamorphism[NullOption] {
-
-      def some[A](x: A): NullOption#Some[A] = x
-
-      val none: NullOption#None = null
-
-      def cata[A, B](opt: NullOption#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B = {
+  object NullableOption {
+    implicit object cata extends Catamorphism[NullableOption] {
+      override def some[A](x: A): NullableOption#Some[A] = x
+      override val none: NullableOption#None = null
+      override def cata[A, B](opt: NullableOption#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B = {
         if (opt == null) ifNone
         else ifSome(opt.asInstanceOf[A])
       }
     }
   }
 
-  trait Java8Option extends OptionTypes {
+  trait Java8Option extends Options {
     type Option[+A] = java.util.Optional[_ <: A]
     type Some[+A] = java.util.Optional[_ <: A]
     type None = java.util.Optional[Nothing]
-
   }
 
   object Java8Option {
-    implicit object ops extends Catamorphism[Java8Option] {
-
-      def some[A](x: A): Java8Option#Some[A] = java.util.Optional.of(x)
-
-      val none: Java8Option#None = java.util.Optional.empty()
-
-      def cata[A, B](opt: Java8Option#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B = {
+    implicit object cata extends Catamorphism[Java8Option] {
+      override def some[A](x: A): Java8Option#Some[A] = java.util.Optional.of(x)
+      override val none: Java8Option#None = java.util.Optional.empty()
+      override def cata[A, B](opt: Java8Option#Option[A])(ifNone: ⇒ B, ifSome: A ⇒ B): B = {
         import java.util.function.{ Function ⇒ F, Supplier }
         def f = new F[A, B] { def apply(a: A): B = ifSome(a) }
         def supplier = new Supplier[B] { def get(): B = ifNone }
@@ -180,27 +159,27 @@ package object modules {
     }
   }
 
-  class Program[T <: OptionTypes: Catamorphism](implicit tag: ClassTag[T]) {
+  class Program[T <: Options: Catamorphism](implicit tag: ClassTag[T]) {
     private val logger = Logger.getLogger(classOf[Program[T]])
     private val ops = Catamorphism[T]
 
-    // a little dance to derive our Show instance
-    import scalaz.std.anyVal.intInstance
-    private val showOptInt = {
-      implicit val showOptInt = OptionShow[T].optionShow[Int]
-      OptionShow[T].optionShow[T#Option[Int]]
-    }
-
-    def run() = {
+    def run[A](value: T#Option[A]) = {
       logger.info(tag.runtimeClass.getName)
+      ops.cata(value)(logger.info("this is none"), r ⇒ logger.info("this is some"))
+
+      import scalaz.std.anyVal.intInstance
+      val showOptInt = {
+        implicit val showOptInt = OptionShow[T].optionShow[Int]
+        OptionShow[T].optionShow[T#Option[Int]]
+      }
 
       val optSome = ops.some(ops.some(13))
       val optNone = ops.some(ops.none)
 
       import showOptInt.showSyntax.ToShowOps
-      logger.info("optSome: " + ToShowOps(optSome).shows)
-      logger.info("optNone: " + ToShowOps(optNone).shows)
-      logger.info("*************************************")
+      logger.info("Options example some: " + ToShowOps(optSome).shows)
+      logger.info("Options example none: " + ToShowOps(optNone).shows)
+      logger.info("******************************************")
     }
   }
 }
