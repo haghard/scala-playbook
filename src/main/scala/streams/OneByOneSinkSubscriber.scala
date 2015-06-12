@@ -5,18 +5,18 @@ import akka.stream.actor.ActorSubscriberMessage.{ OnError, OnComplete, OnNext }
 import akka.stream.actor.{ OneByOneRequestStrategy, ActorSubscriber }
 import scalaz.\/-
 
-object SequentualSinkSubscriber {
-  def props[T] = Props[SequentualSinkSubscriber[T]]
+object OneByOneSinkSubscriber {
+  def props[T] = Props[OneByOneSinkSubscriber[T]]
 }
 
-class SequentualSinkSubscriber[T] extends ActorSubscriber with ActorLogging {
+class OneByOneSinkSubscriber[T] extends ActorSubscriber with ActorLogging {
 
   private var lastVal: Option[T] = None
 
   override val requestStrategy = OneByOneRequestStrategy
 
   override def receive: Receive = {
-    case r: ReadData[T] ⇒
+    case r: ReadElement[T] ⇒
       log.info("ReadData")
       for {
         v ← lastVal

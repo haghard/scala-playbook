@@ -6,11 +6,11 @@ import akka.stream.actor.ActorPublisherMessage.{ Cancel, Request }
 
 import scalaz.\/-
 
-object SourceBatchedPublisher {
-  def props[T] = Props[SourceBatchedPublisher[T]]
+object BoundedPublisher {
+  def props[T] = Props[BoundedPublisher[T]]
 }
 
-class SourceBatchedPublisher[T] extends ActorPublisher[T] with ActorLogging {
+class BoundedPublisher[T] extends ActorPublisher[T] with ActorLogging {
   private var pubSubGap = 0l
   private var lastReq: Option[WriteRequest[T]] = None
 

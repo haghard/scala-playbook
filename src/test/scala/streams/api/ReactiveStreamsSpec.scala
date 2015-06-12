@@ -45,7 +45,7 @@ class ReactiveStreamsSpec extends Specification {
   }
 
   trait RandomRequestSubscriber[T] extends ProcessSubscriber[T] {
-    override def updateBufferSize = ThreadLocalRandom.current().nextInt(12, 27)
+    override val updateBufferSize = ThreadLocalRandom.current().nextInt(12, 27)
   }
 
   "Publisher Subscriber with cancel" should {

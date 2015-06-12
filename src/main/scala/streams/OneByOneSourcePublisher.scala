@@ -4,11 +4,11 @@ import akka.actor.{ Props, ActorLogging }
 import akka.stream.actor.ActorPublisher
 import akka.stream.actor.ActorPublisherMessage.{ Cancel, Request }
 
-object SequentialSourcePublisher {
-  def props[T] = Props[SequentialSourcePublisher[T]]
+object OneByOneSourcePublisher {
+  def props[T] = Props[OneByOneSourcePublisher[T]]
 }
 
-class SequentialSourcePublisher[T] extends ActorPublisher[T] with ActorLogging {
+class OneByOneSourcePublisher[T] extends ActorPublisher[T] with ActorLogging {
   import scalaz.syntax.either._
   private var lastReq: Option[WriteRequest[T]] = None
 

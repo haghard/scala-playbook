@@ -13,7 +13,7 @@ object Reader {
 
 class Reader[T] extends ActorSubscriber with ActorLogging {
   private val buffer = mutable.Queue[T]()
-  private val bufferReq = mutable.Queue[ReadData[T]]()
+  private val bufferReq = mutable.Queue[ReadElement[T]]()
 
   override protected def requestStrategy = OneByOneRequestStrategy
 
@@ -33,7 +33,7 @@ class Reader[T] extends ActorSubscriber with ActorLogging {
       log.info("Error {}", ex)
       context.stop(self)
 
-    case r: ReadData[T] ⇒
+    case r: ReadElement[T] ⇒
       if (buffer.isEmpty) {
         bufferReq.enqueue(r)
       } else {
@@ -42,7 +42,7 @@ class Reader[T] extends ActorSubscriber with ActorLogging {
   }
 
   def finish: Receive = {
-    case r: ReadData[T] ⇒
+    case r: ReadElement[T] ⇒
       if (buffer.isEmpty) {
         context.stop(self)
       } else r.cb(\/-(buffer.dequeue()))

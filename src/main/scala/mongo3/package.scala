@@ -22,7 +22,7 @@ package object mongo3 {
   case class Find[A](dbName: String, collection: String, query: DBObject) extends MongoIO[A]
   case class Insert[A](dbName: String, collection: String, insertObj: DBObject) extends MongoIO[A]
 
-  trait SideEffects[M[_]] { self ⇒
+  trait SideEffects[M[_]] {
     protected implicit var exec: ExecutorService = null
     def withExecutor(ex: ExecutorService): SideEffects[M] = {
       exec = ex

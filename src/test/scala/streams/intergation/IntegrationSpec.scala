@@ -4,7 +4,7 @@ import java.util.concurrent.Executors._
 import akka.actor.{ ActorRef, ActorSystem }
 import akka.stream.actor.{ ActorSubscriber, ActorPublisher }
 import akka.stream.scaladsl._
-import akka.stream.{ ActorFlowMaterializer, ActorFlowMaterializerSettings }
+import akka.stream.{ OperationAttributes, ActorFlowMaterializer, ActorFlowMaterializerSettings }
 import akka.testkit.{ ImplicitSender, TestKit }
 import mongo.MongoProgram.NamedThreadFactory
 import org.scalatest.concurrent.AsyncAssertions.Waiter
@@ -64,9 +64,7 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
 
   "Scalaz-Stream process through ActorPublisher ActorSubscriber one by one" must {
     "run" in {
-      val source: Process[Task, Int] = P.emitAll(range)
-      source.throughAkkaFlow
-        .runLog.run must be === range.toVector
+      P.emitAll(range).sourceToSink.runLog.run must be === range.toVector
     }
   }
 
@@ -151,7 +149,7 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
   }
 
   /**
-   * Broadcast from akka to scalaz-stream
+   * Broadcast from akka source to scalaz-stream
    *                              +------------------+
    *                         +----| Sink.foreach     |
    *                         |    +------------------+
@@ -219,16 +217,17 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
    */
   "Scalaz-Stream process through Akka Flow with batching" must {
     "run" in {
-      val size = 16 //
+      val size = 8 //
       val source: Process[Task, Int] = P.emitAll(range)
+
+      //The example below will ensure that size*2 jobs (but not more) are dequeued from an external process and stored locally in memory
       val flow = Flow[Int].map(_ * 2)
+        .withAttributes(OperationAttributes.inputBuffer(initial = size * 2, max = size * 2))
 
-      implicit val mat = ActorFlowMaterializer(
-        ActorFlowMaterializerSettings(system)
-          .withInputBuffer(initialSize = size * 2, maxSize = size * 2))
+      implicit val mat = ActorFlowMaterializer(ActorFlowMaterializerSettings(system))
+      //.withInputBuffer(initialSize = size * 2, maxSize = size * 2))
 
-      (source.throughBufferedAkkaFlow(size, flow)(system, mat))
-        .fold1(_ ++ _)
+      (source.throughBufferedAkkaFlow(size, flow)(system, mat)).fold1(_ ++ _)
         .runLog.run must be === Vector(range.toVector.map(_ * 2))
     }
   }
