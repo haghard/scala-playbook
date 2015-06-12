@@ -6,19 +6,20 @@ import org.reactivestreams.{ Subscription, Subscriber, Publisher }
 import scalaz.concurrent.{ Task, Strategy }
 import scalaz.stream.{ Process, Cause, async }
 
-object ProcessPublisher {
+object ScalazProcessPublisher {
   def apply[T](source: Process[Task, T])(implicit ex: ExecutorService) =
-    new ProcessPublisher[T](source)
+    new ScalazProcessPublisher[T](source)
 }
 
-class ProcessPublisher[T] private (source: Process[Task, T])(implicit ex: ExecutorService) extends Publisher[T] {
-  private val logger = Logger.getLogger("process-pub")
+class ScalazProcessPublisher[T] private (source: Process[Task, T])(implicit ex: ExecutorService) extends Publisher[T] {
+  private val logger = Logger.getLogger("scalaz-process-publisher")
 
-  val P = Process
+  private val P = Process
   private val signal = async.signalOf(0)(Strategy.Executor(ex))
-  private val signalP = signal.discrete
+  //private val signalD = signal.discrete
 
   private var subscriber: Option[Subscriber[_ >: T]] = None
+  private lazy val chunkedSource = streams.io.chunkR(source)
 
   private val halter: Cause ⇒ Process[Task, Unit] = {
     case cause @ Cause.End ⇒
@@ -47,18 +48,18 @@ class ProcessPublisher[T] private (source: Process[Task, T])(implicit ex: Execut
 
     override def request(l: Long): Unit = {
       require(l > 0, s" $subscriber violated the Reactive Streams rule 3.9 by requesting a non-positive number of elements.")
-      signal.set(l.toInt)
-        .runAsync(_ ⇒ logger.info(s"request: $l"))
+      signal.set(l.toInt).runAsync(_ ⇒ logger.debug(s"request: $l"))
     }
   }
 
-  val chunkedSource = streams.io.chunkR(source)
   (for {
-    reqSize ← signalP.filter(_ > 0)
-    batch ← chunkedSource chunk reqSize
+    requestSize ← signal.discrete.filter(_ > 0)
+    batch ← chunkedSource chunk requestSize //TODO: Use long
     r ← P.emitAll(batch).flatMap(i ⇒ P.eval(Task.delay { subscriber.fold(())(_.onNext(i)) }))
   } yield {
-    if (batch.size != reqSize.toInt) throw new Exception("IOF")
+    if (batch.size != requestSize.toInt) { //End of process
+      throw new Exception("IOF")
+    }
   }).onHalt(halter).run[Task].runAsync(_ ⇒ ())
 
   /**

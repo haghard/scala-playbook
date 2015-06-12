@@ -11,7 +11,7 @@ import org.scalatest.concurrent.AsyncAssertions.Waiter
 import org.scalatest.{ BeforeAndAfterAll, BeforeAndAfterEach, MustMatchers, WordSpecLike }
 
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{ SyncVar, ExecutionContext }
+import scala.concurrent.SyncVar
 import scala.util.{ Try, Success, Failure }
 import scalaz.concurrent.Task
 import scalaz.stream._
@@ -28,8 +28,9 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
   }
 
   object AkkaContext {
-    implicit val executionContext: ExecutionContext = system.dispatcher
-    implicit val materializer = ActorFlowMaterializer(ActorFlowMaterializerSettings(system))
+    implicit val materializer = ActorFlowMaterializer(ActorFlowMaterializerSettings(system)
+      .withDispatcher("akka.flow-dispatcher"))
+    implicit val E = streams.ExecutionContextExecutorServiceBridge(materializer.executionContext)
   }
 
   import AkkaContext._
@@ -227,7 +228,7 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
       implicit val mat = ActorFlowMaterializer(ActorFlowMaterializerSettings(system))
       //.withInputBuffer(initialSize = size * 2, maxSize = size * 2))
 
-      (source.throughBufferedAkkaFlow(size, flow)(system, mat)).fold1(_ ++ _)
+      (source.throughAkkaFlow(size, flow)(system, mat)).fold1(_ ++ _)
         .runLog.run must be === Vector(range.toVector.map(_ * 2))
     }
   }
@@ -243,19 +244,18 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
     "run" in {
       val size = 8
       val sync = new SyncVar[Try[Int]]()
-      implicit val ex = newFixedThreadPool(3, new NamedThreadFactory("pub-sub"))
+      implicit val ex = newFixedThreadPool(2, new NamedThreadFactory("pub-sub"))
 
-      implicit val mat = ActorFlowMaterializer(
-        ActorFlowMaterializerSettings(system)
-          .withInputBuffer(initialSize = size * 2, maxSize = size * 4))
-
-      val akkaSource = P.emitAll(range).toAkkaSource
+      val akkaSource = P.emitAll(range).toPublisher
       val akkaSink = akka.stream.scaladsl.Sink.fold[Int, Int](0)(_ + _)
+
+      val flow = Flow[Int].map { x ⇒ println(Thread.currentThread().getName); x * 2 }
+        .withAttributes(OperationAttributes.inputBuffer(initial = size * 2, max = size * 2))
 
       FlowGraph.closed(akkaSource, akkaSink)((_, _)) { implicit b ⇒
         import FlowGraph.Implicits._
-        (src, sink) ⇒ src ~> Flow[Int].map(_ * 2) ~> sink
-      }.run()(mat)._2.onComplete(r ⇒ sync.put(r))
+        (src, sink) ⇒ src ~> flow ~> sink
+      }.run()._2.onComplete(r ⇒ sync.put(r))
 
       sync.get must be === Success(range.reduce(_ + _) * 2)
     }

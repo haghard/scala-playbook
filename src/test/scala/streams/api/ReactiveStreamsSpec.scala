@@ -25,7 +25,7 @@ class ReactiveStreamsSpec extends Specification {
       val sync = new SyncVar[Boolean]()
       val source: Process[Task, Int] = naturals.take(81)
 
-      ProcessPublisher[Int](source)
+      ScalazProcessPublisher[Int](source)
         .subscribe(new ProcessSubscriber[Int](s, sync))
 
       sync.get should be equalTo true
@@ -54,7 +54,7 @@ class ReactiveStreamsSpec extends Specification {
       val sync = new SyncVar[Boolean]()
       val source: Process[Task, Int] = naturals.take(89)
 
-      ProcessPublisher[Int](source)
+      ScalazProcessPublisher[Int](source)
         .subscribe(new ProcessSubscriber[Int](s, sync) with CancelableSubscriber[Int])
 
       sync.get should be equalTo true
@@ -66,40 +66,10 @@ class ReactiveStreamsSpec extends Specification {
       val sync = new SyncVar[Boolean]()
       val source: Process[Task, Int] = naturals.take(25146)
 
-      ProcessPublisher[Int](source)
+      ScalazProcessPublisher[Int](source)
         .subscribe(new ProcessSubscriber[Int](11, sync) with RandomRequestSubscriber[Int])
 
       sync.get should be equalTo true
     }
   }
-
-  /*"chunk reader" should {
-    "run" in {
-      import scala.concurrent.duration._
-      implicit val sch = newScheduledThreadPool(1, new NamedThreadFactory("Schedulers"))
-      implicit val str = Strategy.Executor(newFixedThreadPool(2, new NamedThreadFactory("timeout-worker")))
-
-      val sync = new SyncVar[Boolean]()
-
-      def naturals = {
-        def go(i: Int): Process[Task, Int] =
-          Process.await(Task.delay(i))(i ⇒ Process.emit(i) ++ go(i + 1))
-        go(0)
-      }
-
-      //val source: Process[Task, Int] = Process.emitAll(1 to 20)
-      val source: Process[Task, Int] = naturals
-
-      val tags: Process[Task, Int] = Process.emitAll(Seq(3, 2, 5, 5, 2, 10, 1))
-      val chunkedSource = streams.io.chunkR(source)
-
-      (for {
-        n ← (time.awakeEvery(100 milli)(str, sch)) zip tags
-        _ ← chunkedSource.chunk(n._2)
-          .map(x ⇒ s"batch: ${n._2} content: ${x}").observe(scalaz.stream.io.stdOutLines)
-      } yield ()).run.runAsync(_ ⇒ sync.put(true))
-
-      sync.get(5000) should be equalTo Some(true)
-    }
-  }*/
 }

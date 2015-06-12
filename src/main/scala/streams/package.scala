@@ -7,7 +7,7 @@ import akka.stream.actor.{ ActorSubscriber, ActorPublisher }
 import akka.stream.scaladsl.{ FlowGraph, Flow }
 import mongo.MongoProgram.NamedThreadFactory
 import streams.BatchWriter.WriterDone
-import streams.api.ProcessPublisher
+import streams.api.ScalazProcessPublisher
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.{ Failure, Success }
@@ -47,11 +47,24 @@ package object streams { outer ⇒
     def sourceToSink(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, I] =
       outer.oneByOne(self)
 
-    def throughBufferedAkkaFlow(requestSize: Int, f: Flow[I, I, Unit])(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, Vector[I]] =
+    /**
+     *
+     * @param requestSize
+     * @param f
+     * @param actorRefFactory
+     * @param materializer
+     * @return
+     */
+    def throughAkkaFlow(requestSize: Int, f: Flow[I, I, Unit])(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, Vector[I]] =
       outer.throughFlow(self, requestSize, f)
 
-    def toAkkaSource(implicit ex: ExecutorService): akka.stream.scaladsl.Source[I, Unit] =
-      akka.stream.scaladsl.Source(ProcessPublisher(self))
+    /**
+     *
+     * @param ex
+     * @return
+     */
+    def toPublisher(implicit ex: ExecutorService): akka.stream.scaladsl.Source[I, Unit] =
+      akka.stream.scaladsl.Source(ScalazProcessPublisher(self))
   }
 
   private def throughFlow[I](process: Process[Task, I], batchSize: Int, flow: Flow[I, I, Unit])(implicit arf: ActorRefFactory, m: ActorFlowMaterializer): Process[Task, Vector[I]] = {
