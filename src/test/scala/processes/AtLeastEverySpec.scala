@@ -24,7 +24,7 @@ class AtLeastEverySpec extends Specification {
   val str = Strategy.Executor(newFixedThreadPool(2, new NamedThreadFactory("timeout-worker")))
 
   "Process atLeastEvery" should {
-    "if we exceed latency for whole provess we will throw TimeoutException/emit default" in {
+    "if we exceed latency for whole process we will throw TimeoutException/emit default" in {
       val n = 15
       def atLeastEvery[A](rate: Process[Task, Duration], default: A)(p: Process[Task, A]): Process[Task, A] = {
         for {

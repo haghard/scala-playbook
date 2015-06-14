@@ -16,7 +16,6 @@ class ScalazProcessPublisher[T] private (source: Process[Task, T])(implicit ex: 
 
   private val P = Process
   private val signal = async.signalOf(0)(Strategy.Executor(ex))
-  //private val signalD = signal.discrete
 
   private var subscriber: Option[Subscriber[_ >: T]] = None
   private lazy val chunkedSource = streams.io.chunkR(source)

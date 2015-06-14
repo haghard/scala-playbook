@@ -1,5 +1,6 @@
 package processes
 
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors._
 import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
@@ -15,7 +16,6 @@ import scalaz.concurrent.{ Strategy, Task }
 
 class ScalazProcessConcurrencyOptsSpec extends Specification {
   val P = scalaz.stream.Process
-
   val logger = Logger.getLogger("proc-binding")
 
   "Binding to asynchronous sources" should {
@@ -127,6 +127,54 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
       out(0)("B") === 10
       out(0)("C") === 9
       out(0)("A") === 5
+    }
+  }
+
+  /*
+   * The resulting streams can be pulled independently with different rates,
+   * though they will propagate backpressure if one of them is running too far ahead of the other
+   */
+  def broadcast[T](source: Process[Task, T], limit: Int = 10)(implicit S: scalaz.concurrent.Strategy): Process[Task, (Process[Task, T], Process[Task, T])] = {
+    val left = async.boundedQueue[T](limit)
+    val right = async.boundedQueue[T](limit)
+    val qWriter = (source observe (left.enqueue) observe (right.enqueue)).drain
+      .onComplete(Process.eval_ { logger.info("All input was scheduled."); left.close.flatMap(_ ⇒ right.close) })
+    (qWriter.drain merge P.emit((left.dequeue, right.dequeue)))
+  }
+
+  "Broadcast single process in 2 output processes where one of them degrade slowly" should {
+    "have gapped at most of queue size and slow down the whole flow" in {
+      implicit val E = newFixedThreadPool(4, new NamedThreadFactory("broadcast"))
+      implicit val S = Strategy.Executor(E)
+
+      val digits = P.emitAll(1 to 20)
+      val latch = new CountDownLatch(1)
+
+      (broadcast(digits).flatMap { ps ⇒
+        val l = ps._1
+        val r = ps._2
+        //process with constant latency
+        val left = l.zip(P.repeatEval(Task {
+          val delayPerMsg = 500
+          Thread.sleep(delayPerMsg)
+          delayPerMsg
+        })).map(r ⇒ logger.info(s"${r._2} fetch left ${r._1}"))
+
+        //degrade
+        var latency = 0
+        val right = r.zip(P.repeatEval(Task {
+          val init = 500
+          latency += 30
+          val delay = init + latency
+          Thread.sleep(delay)
+          delay
+        })).map(r ⇒ logger.info(s"${r._2} fetch right ${r._1}"))
+        (left merge right)
+      }).onComplete(P.eval(Task.delay { logger.info("Consumer are done"); latch.countDown() }))
+        .run.runAsync(_ ⇒ ())
+
+      latch.await
+      1 === 1
     }
   }
 }
