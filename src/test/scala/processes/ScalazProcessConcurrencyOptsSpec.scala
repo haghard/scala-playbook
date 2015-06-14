@@ -149,29 +149,30 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
 
       val digits = P.emitAll(1 to 20)
       val latch = new CountDownLatch(1)
+      var latency = 0
+      val p = for {
+        ps ← broadcast(digits)
 
-      (broadcast(digits).flatMap { ps ⇒
-        val l = ps._1
-        val r = ps._2
-        //process with constant latency
-        val left = l.zip(P.repeatEval(Task {
+        right = ps._1.zip(P.repeatEval(Task {
           val delayPerMsg = 500
           Thread.sleep(delayPerMsg)
           delayPerMsg
         })).map(r ⇒ logger.info(s"${r._2} fetch left ${r._1}"))
 
-        //degrade
-        var latency = 0
-        val right = r.zip(P.repeatEval(Task {
+        left = ps._2.zip(P.repeatEval(Task {
           val init = 500
           latency += 30
           val delay = init + latency
           Thread.sleep(delay)
           delay
         })).map(r ⇒ logger.info(s"${r._2} fetch right ${r._1}"))
-        (left merge right)
-      }).onComplete(P.eval(Task.delay { logger.info("Consumer are done"); latch.countDown() }))
-        .run.runAsync(_ ⇒ ())
+
+        _ ← right merge left
+      } yield ()
+
+      p.onComplete(P.eval(Task.delay {
+        logger.info("Consumer are done"); latch.countDown()
+      })).run.runAsync(_ ⇒ ())
 
       latch.await
       1 === 1
