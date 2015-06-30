@@ -1,5 +1,6 @@
 package tree
 
+import scala.annotation.tailrec
 import org.specs2.mutable.Specification
 
 class BTreeStructuralRecursionSpec extends Specification {
@@ -32,6 +33,22 @@ class BTreeStructuralRecursionSpec extends Specification {
       t = t :+ 9
 
       foldLeft(t)(0)(_ + _) === 42
+    }
+  }
+
+  "Btree" should {
+    "has been constructed and searched" in {
+      var t = node(5)
+      t = t :+ 4
+      t = t :+ 10
+      t = t :+ 11
+      t = t :+ 3
+      t = t :+ 9
+      t = t :+ 8
+      t = t :+ 2
+      t = t :+ 7
+
+      t.search(7) === Some(7)
     }
   }
 
@@ -80,17 +97,32 @@ class BTreeStructuralRecursionSpec extends Specification {
     def invert[A](tree: Tree[A]): Tree[A] =
       foldLoop(tree, nil[A]) { (left, value, right) ⇒ Node(value, right, left) }
 
-    implicit class TreeSyntax[T](self: Tree[T]) {
+    implicit class TreeSyntax[T](self: Tree[T])(implicit ord: Ordering[T]) {
+      @tailrec private def scan(searched: T, t: Tree[T]): Option[T] = t match {
+        case Leaf                                    ⇒ None
+        case Node(v, left, right) if (searched == v) ⇒ Option(v)
+        case Node(v, left, right) ⇒
+          if (ord.lt(searched, v)) {
+            println(s"Search: passed: $v")
+            scan(searched, left)
+          } else {
+            println(s"Search: passed: $v")
+            scan(searched, right)
+          }
+      }
 
-      def :+(v: T)(implicit ord: Ordering[T]): Tree[T] = {
+      def search(searched: T): Option[T] =
+        scan(searched, self)
+
+      def :+(v: T): Tree[T] = {
         (v, self) match {
           case (value, Leaf) ⇒ node(value)
           case (inserted, Node(a, left, right)) if inserted == a ⇒
             Node(inserted, left, right)
           case (inserted, Node(a, left, right)) if ord.lt(inserted, a) ⇒
-            Node(a, left :+ (inserted), right)
+            Node(a, left :+ inserted, right)
           case (inserted, Node(a, left, right)) if ord.gt(inserted, a) ⇒
-            Node(a, left, right :+ (inserted))
+            Node(a, left, right :+ inserted)
         }
       }
     }
