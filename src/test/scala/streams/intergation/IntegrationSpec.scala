@@ -221,7 +221,7 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
       val size = 8 //
       val source: Process[Task, Int] = P.emitAll(range)
 
-      //The example below will ensure that size*2 jobs (but not more) are dequeued from an external process and stored locally in memory
+      //The example below will ensure that size*2 jobs (but not more) are enqueue from an external process and stored locally in memory
       val flow = Flow[Int].map(_ * 2)
         .withAttributes(OperationAttributes.inputBuffer(initial = size * 2, max = size * 2))
 

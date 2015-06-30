@@ -131,10 +131,10 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
   }
 
   /*
-   * The resulting streams can be pulled independently with different rates,
-   * though they will propagate backpressure if one of them is running too far ahead of the other
+   * The resulting streams can be pulled independently on different rates,
+   * though they will propagate back pressure if one of them is running too far ahead of the other
    */
-  def broadcast[T](source: Process[Task, T], limit: Int = 10)(implicit S: scalaz.concurrent.Strategy): Process[Task, (Process[Task, T], Process[Task, T])] = {
+  def broadcast2[T](source: Process[Task, T], limit: Int = 10)(implicit S: scalaz.concurrent.Strategy): Process[Task, (Process[Task, T], Process[Task, T])] = {
     val left = async.boundedQueue[T](limit)
     val right = async.boundedQueue[T](limit)
     val qWriter = (source observe (left.enqueue) observe (right.enqueue)).drain
@@ -147,19 +147,19 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
       implicit val E = newFixedThreadPool(4, new NamedThreadFactory("broadcast"))
       implicit val S = Strategy.Executor(E)
 
-      val digits = P.emitAll(1 to 20)
+      val digits = P.emitAll(1 to 35)
       val latch = new CountDownLatch(1)
       var latency = 0
       val p = for {
-        ps ← broadcast(digits)
+        both ← broadcast2(digits)
 
-        right = ps._1.zip(P.repeatEval(Task {
+        right = both._1.zip(P.repeatEval(Task {
           val delayPerMsg = 500
           Thread.sleep(delayPerMsg)
           delayPerMsg
         })).map(r ⇒ logger.info(s"${r._2} fetch left ${r._1}"))
 
-        left = ps._2.zip(P.repeatEval(Task {
+        left = both._2.zip(P.repeatEval(Task {
           val init = 500
           latency += 30
           val delay = init + latency
@@ -170,10 +170,7 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
         _ ← right merge left
       } yield ()
 
-      p.onComplete(P.eval(Task.delay {
-        logger.info("Consumer are done"); latch.countDown()
-      })).run.runAsync(_ ⇒ ())
-
+      p.onComplete(P.eval(Task.delay { logger.info("Consumer are done"); latch.countDown() })).run.runAsync(_ ⇒ ())
       latch.await
       1 === 1
     }

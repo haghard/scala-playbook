@@ -28,7 +28,6 @@ class BTreeSpec extends Specification {
         n
       }
 
-      //tree foreach (logger.info(_))
       val tree = BTree(4)(next)
       tree.size should be equalTo 15
     }
@@ -124,8 +123,7 @@ class BTreeSpec extends Specification {
 
 object BTree extends Foldable0[BTree] {
 
-  def /\[T](v: T, l: Option[BTree[T]] = None, r: Option[BTree[T]] = None) =
-    new BTree(v, l, r)
+  def /\[T](v: T, l: Option[BTree[T]] = None, r: Option[BTree[T]] = None) = new BTree(v, l, r)
 
   def apply[T](levelNumber: Int)(block: ⇒ T): BTree[T] =
     levelNumber match {
@@ -135,7 +133,7 @@ object BTree extends Foldable0[BTree] {
 
   def sequence[T](tree: BTree[Future[T]])(implicit ec: ExecutionContext): Future[BTree[T]] = {
     import scala.concurrent.duration._
-    val pending = new AtomicInteger(tree.size)
+    val pending = new AtomicInteger(tree.size())
     val p = Promise[BTree[T]]()
 
     //foreach
@@ -215,7 +213,7 @@ object BTree extends Foldable0[BTree] {
   }
 
   override def foldMapPar[T, B](t: BTree[T])(f: T ⇒ B)(implicit m: Monoid[B]): Task[B] =
-    Task delay (Option(t)) flatMap { tree ⇒
+    Task.now(Option(t)).flatMap { tree ⇒
       foldMap2(tree)(element ⇒ Task.delay {
         //Thread.sleep(ThreadLocalRandom.current().nextInt(50, 100));
         //logger.info(s"read $element")

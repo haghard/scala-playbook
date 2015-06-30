@@ -1,6 +1,6 @@
 package tree
 
-import java.util.concurrent.Executors
+import java.util.concurrent.{ ExecutorService, Executor, Executors }
 
 import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
@@ -39,8 +39,8 @@ class TreeSpec extends Specification {
   }
 
   "tree" should {
-    "foldMapTask" in {
-      implicit val M0 = monoidT(M)
+    "foldMapPar" in {
+      implicit val M0 = monoidPar(M)
 
       val m: (Int) ⇒ Int =
         x ⇒ {
@@ -63,6 +63,7 @@ case class Branch[T](left: Tree[T], right: Tree[T]) extends Tree[T]
 
 object TreeF extends Foldable0[Tree] {
   private val logger = Logger.getLogger("tree")
+  implicit val S = Executors.newFixedThreadPool(2, new NamedThreadFactory("tree-folder"))
 
   override def foldMap[A, B](as: Tree[A])(f: A ⇒ B)(implicit mb: Monoid[B]): B =
     as match {
@@ -80,25 +81,20 @@ object TreeF extends Foldable0[Tree] {
     case Branch(l, r) ⇒ foldRight(l)(foldRight(r)(z)(f))(f)
   }
 
-  override def foldMapPar[A, B](fa: Tree[A])(f: (A) ⇒ B)(implicit m: Monoid[B]): Task[B] = {
-    Task delay (fa) flatMap { tree ⇒
-      foldMap(tree)(element ⇒ Task.delay {
-        f(element)
-      })(monoidT(m))
+  override def foldMapPar[A, B](fa: Tree[A])(f: (A) ⇒ B)(implicit M: Monoid[B]): Task[B] = {
+    Task.now(fa).flatMap { tree ⇒
+      foldMap(tree)(element ⇒ Task.delay { f(element) })(monoidPar(M))
     }
   }
 
-  val executor = Executors.newFixedThreadPool(2, new NamedThreadFactory("tree-folder"))
-
-  implicit def monoidT[A](m: Monoid[A]): Monoid[Task[A]] = new Monoid[Task[A]] {
-
+  implicit def monoidPar[A](m: Monoid[A]): Monoid[Task[A]] = new Monoid[Task[A]] {
     private val ND = Nondeterminism[Task]
 
     override def zero = Task.delay(m.zero)
 
     override def append(a: Task[A], b: ⇒ Task[A]): Task[A] =
       for {
-        r ← ND.nmap2(Task.fork(a)(executor), Task.fork(b)(executor)) { (l, r) ⇒
+        r ← ND.nmap2(Task.fork(a)(S), Task.fork(b)(S)) { (l, r) ⇒
           logger.info(s" op($l,$r)")
           m.append(l, r)
         }

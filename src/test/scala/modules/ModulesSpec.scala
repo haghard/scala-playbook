@@ -7,7 +7,7 @@ class ModulesSpec extends Specification {
   "Abstract Algebraic Data Types with abstract types and a catamorphism" should {
     import OptionType._
 
-    "GuavaOption" in {
+    "run with GuavaOption" in {
       import com.google.common.base.{ Optional ⇒ GOptional }
       val p = Program[GuavaOption]
       p.run(GOptional.absent[Int]) === None

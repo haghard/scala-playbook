@@ -10,6 +10,8 @@ import scala.reflect.ClassTag
  * classes are all about constructing new concrete types.
  *
  *
+ * How to abstract Algebraic Data Types with abstract types and a catamorphism:
+ *
  * If we try than we can find some similarity between 2 processes
  * a) finding concrete implicit value by compiler
  * b) finding concrete dependency by DI framework
@@ -23,10 +25,10 @@ package object modules {
    *
    * This is just a convenient way to gather several types into a single one, a bit like a record, but for types.
    * Given an Options, we can now speak about one of the types it contains
-   * using a type projection, eg. OptionTypes#Option[A].
+   * using a type projection, eg. Options#Option[A].
    *
    *
-   * Abstracting over types
+   * Abstract over the type hierarchy in trait
    *
    */
   trait Options {
@@ -62,23 +64,22 @@ package object modules {
 
   /**
    *
-   * OptionShow[T <: Options : Catamorphism] means that OptionShow is parameterized by a T,
-   * which is required to be a subtype of Options.
+   * OptionShow[T <: Options : Catamorphism] means that OptionShow is parametrized by a T, which is required to be a subtype of Options.
    * Also an instance of Catamorphism[T] must be implicitly available.
    *
+   * New structure that depends on our module.
+   *
    */
-
   import scalaz.Show
 
   final class OptionShow[T <: Options: Catamorphism] {
     def optionShow[A: Show]: Show[T#Option[A]] = {
-      // retrieving the typeclass instances
       val showA = Show[A]
       val ops = Catamorphism[T]
 
       new Show[T#Option[A]] {
-        override def shows(opt: T#Option[A]): String = ops.cata(opt)("none", x ⇒
-          s"some(${showA.shows(x)})")
+        override def shows(opt: T#Option[A]): String =
+          ops.cata(opt)("none", x ⇒ s"some(${showA.shows(x)})")
       }
     }
   }
@@ -106,7 +107,6 @@ package object modules {
           case scala.Some(x) ⇒ ifSome(x)
         }
     }
-
   }
 
   object scala0 {
@@ -233,8 +233,8 @@ package object modules {
         })
 
       //examples
-
-      /*import scalaz.std.anyVal.intInstance
+      /*
+      import scalaz.std.anyVal.intInstance
       val showOptInt = {
         implicit val showOptInt = OptionShow[T].optionShow[Int]
         OptionShow[T].optionShow[T#Option[Int]]
