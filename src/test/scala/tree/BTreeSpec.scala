@@ -266,7 +266,7 @@ class BTree[T] private[BTree] (val v: T, val left: Option[BTree[T]], val right: 
       Future {
         val r = f(v)
         logger.info(s"start eval $r")
-        Thread.sleep(ThreadLocalRandom.current().nextLong(100, 400)) //for testing ...
+        Thread.sleep(ThreadLocalRandom.current().nextInt(100, 400)) //for testing ...
         logger.info(s"end eval $r")
         r
       },

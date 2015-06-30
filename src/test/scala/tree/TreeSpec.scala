@@ -6,6 +6,7 @@ import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
 
+import scala.concurrent.forkjoin.ThreadLocalRandom
 import scalaz.{ Nondeterminism, Monoid }
 import scalaz.concurrent.Task
 import scalaz._
@@ -44,15 +45,15 @@ class TreeSpec extends Specification {
 
       val m: (Int) ⇒ Int =
         x ⇒ {
-          Thread.sleep(10)
+          Thread.sleep(ThreadLocalRandom.current().nextInt(100, 300))
           x
         }
 
       val b = Branch(
-        Branch(Leaf(1), Branch(Leaf(1), Leaf(1))),
-        Branch(Leaf(1), Branch(Leaf(1), Branch(Leaf(1), Leaf(1)))))
+        Branch(Leaf(1), Branch(Leaf(2), Leaf(3))),
+        Branch(Leaf(4), Branch(Leaf(5), Branch(Leaf(6), Leaf(7)))))
 
-      foldMapPar(b)(m).run should be equalTo 7
+      foldMapPar(b)(m).run should be equalTo 28
     }
   }
 }

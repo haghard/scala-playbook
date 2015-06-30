@@ -31,8 +31,8 @@ class BTreeStructuralRecursionSpec extends Specification {
         )
       )
 
-      foldLeft(tree)(2)(_ + _) === 33
-      println("*******Invert**********")
+      foldLeft(tree)(0)(_ + _) === 33
+      println("Invert")
       val invertedTree = invert(tree)
       foldLeft(invertedTree)(0)(_ + _) === 31
     }
@@ -82,7 +82,7 @@ class BTreeStructuralRecursionSpec extends Specification {
 
   "Btree" should {
     "has been foldMap" in {
-      val uniqueItems = List(1, 90, 20, 60, 40, 50, 30, 70, 80, 10, 15, 26, 37, 41)
+      val uniqueItems = List(1, 90, 20, 60, 40, 50, 30, 70, 80, 10, 15, 26, 37, 41, 22, 33, 44, 55)
       val tree = uniqueItems.foldLeft(node(49))(_ :+ _)
 
       val m: (Int) ⇒ Int =
@@ -123,9 +123,6 @@ class BTreeStructuralRecursionSpec extends Specification {
     def invert[A](tree: Tree[A]): Tree[A] =
       foldLoop(tree, nil[A]) { (left, value, right) ⇒ Node(value, right, left) }
 
-    /**
-     *
-     */
     override def foldLeft[T, A](as: Tree[T])(z: A)(f: (A, T) ⇒ A): A = as match {
       case Leaf ⇒ z
       case Node(v, Leaf, Leaf) ⇒
@@ -138,9 +135,6 @@ class BTreeStructuralRecursionSpec extends Specification {
         foldLeft(r)(foldLeft(l)(acc)(f))(f)
     }
 
-    /**
-     *
-     */
     override def foldRight[T, A](as: Tree[T])(z: A)(f: (T, A) ⇒ A): A = as match {
       case Leaf ⇒ z
       case Node(v, Leaf, Leaf) ⇒
@@ -153,31 +147,25 @@ class BTreeStructuralRecursionSpec extends Specification {
         foldRight(l)(foldRight(r)(acc)(f))(f)
     }
 
-    /**
-     *
-     *
-     */
     override def foldMap[T, A](fa: Tree[T])(f: (T) ⇒ A)(implicit m: Monoid[A]): A = {
-      fa match {
-        case Leaf                ⇒ m.zero
-        case Node(v, Leaf, Leaf) ⇒ f(v)
-        case Node(v, l, r)       ⇒ m.append(foldMap(l)(f)(m), m.append(f(v), foldMap(r)(f)(m)))
-      }
+      def foldMap0(fa: Tree[T], n: Long = 0l)(f: (T) ⇒ A)(implicit m: Monoid[A]): A =
+        fa match {
+          case Leaf                ⇒ m.zero
+          case Node(v, Leaf, Leaf) ⇒ f(v)
+          case Node(v, l, r) ⇒
+            if (n % 2 == 0) m.append(foldMap0(l, n + 1)(f)(m), m.append(f(v), foldMap0(r, n + 1)(f)(m)))
+            else m.append(m.append(f(v), foldMap0(l, n + 1)(f)(m)), foldMap0(r, n + 1)(f)(m))
+        }
+      foldMap0(fa)(f)
     }
 
-    /**
-     *
-     */
     override def foldMap2[T, A](fa: Option[Tree[T]])(f: (T) ⇒ A)(implicit m: Monoid[A]): A = ???
 
-    /**
-     *
-     */
     override def foldMapPar[T, A](fa: Tree[T])(f: (T) ⇒ A)(implicit M: Monoid[A]): Task[A] =
       Task.now(fa).flatMap { foldMap(_)(e ⇒ Task.delay(f(e)))(monoidPar(M)) }
 
     def monoidPar[A](m: Monoid[A]): Monoid[Task[A]] = new Monoid[Task[A]] {
-      implicit val S = Executors.newFixedThreadPool(2, new NamedThreadFactory("btree-par-monoid"))
+      implicit val S = Executors.newFixedThreadPool(3, new NamedThreadFactory("btree-par-monoid"))
       private val ND = Nondeterminism[Task]
 
       override def zero = Task.delay(m.zero)
@@ -190,7 +178,6 @@ class BTreeStructuralRecursionSpec extends Specification {
           }
         } yield r
     }
-
   }
 
   implicit class TreeSyntax[T](self: Tree[T])(implicit ord: scala.math.Ordering[T]) {
