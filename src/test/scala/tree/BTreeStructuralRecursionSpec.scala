@@ -161,10 +161,7 @@ class BTreeStructuralRecursionSpec extends Specification {
       fa match {
         case Leaf                ⇒ m.zero
         case Node(v, Leaf, Leaf) ⇒ f(v)
-        case Node(v, l, r) ⇒ m.append(
-          foldMap(l)(f)(m),
-          m.append(f(v), foldMap(r)(f)(m))
-        )
+        case Node(v, l, r)       ⇒ m.append(foldMap(l)(f)(m), m.append(f(v), foldMap(r)(f)(m)))
       }
     }
 
@@ -176,11 +173,8 @@ class BTreeStructuralRecursionSpec extends Specification {
     /**
      *
      */
-    override def foldMapPar[T, A](fa: Tree[T])(f: (T) ⇒ A)(implicit M: Monoid[A]): Task[A] = {
-      Task.now(fa) flatMap { tree ⇒
-        foldMap(tree)(e ⇒ Task.delay(f(e)))(monoidPar(M))
-      }
-    }
+    override def foldMapPar[T, A](fa: Tree[T])(f: (T) ⇒ A)(implicit M: Monoid[A]): Task[A] =
+      Task.now(fa).flatMap { foldMap(_)(e ⇒ Task.delay(f(e)))(monoidPar(M)) }
 
     def monoidPar[A](m: Monoid[A]): Monoid[Task[A]] = new Monoid[Task[A]] {
       implicit val S = Executors.newFixedThreadPool(2, new NamedThreadFactory("btree-par-monoid"))
