@@ -21,26 +21,22 @@ class BroadcastSpec extends Specification {
    *
    */
   def broadcast[A](p: Process[Task, A], subs: Process[Task, String], bound: Int = 10): Process[Task, Unit] = Process.suspend {
-
     val P = newFixedThreadPool(2, new NamedThreadFactory("broadcast-pub")) // publish, and fork new consumers
     val I = Strategy.Executor(P)
-
     val S = newFixedThreadPool(1, new NamedThreadFactory("signal"))
     val SIG = Strategy.Executor(S)
-
     val Q = newFixedThreadPool(3, new NamedThreadFactory("broadcast-sub")) // could be extended depends on consumer's size
     val C = Strategy.Executor(Q)
 
+    //Behaves like a AtomicReference for Set[Queue[A]]
     val signal = async.signalOf(Set[async.mutable.Queue[A]]())(SIG)
 
     def publish(a: A): Task[Unit] = for {
-      qsList ← signal.discrete.filter(s ⇒ s.nonEmpty).take(1).runLog
+      qsList ← signal.discrete.filter(s ⇒ s.nonEmpty).take(1).runLog //get
       qs = qsList.flatMap { _.toList }
 
-      _ = logger.info(s"publish $a for ${qs.size}")
-      _ ← Task.gatherUnordered(qs.toList.map { q ⇒
-        q.enqueueOne(a)
-      })
+      _ = logger.info(s"Publish $a for ${qs.size}")
+      _ ← Task.gatherUnordered(qs.toList.map(_ enqueueOne a))
     } yield ()
 
     def unsubscribe(q: async.mutable.Queue[A]): Task[Unit] = for {
