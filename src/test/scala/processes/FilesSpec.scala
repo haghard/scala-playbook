@@ -23,18 +23,18 @@ class FilesSpec extends Specification {
   "Parallel batch file processing. Ordered out" in {
     val out = "testdata/utf8-out0.txt"
 
-    def transform(line: String): Process[Task, String] = P.eval(Task {
+    def invert(line: String): Process[Task, String] = P.eval(Task {
       logger.info(s"Read: $line")
-      line./:("")((c, acc) ⇒ acc + c)
+      line.:\(Thread.currentThread().getName + ": ")((c, acc) ⇒ acc + c)
     }(E))
 
     val source = io.linesR(in)
       .chunk(parallelism)
       .flatMap(emitAll)
-      .map(transform(_))
+      .map(invert)
 
     val flow = merge.mergeN(parallelism)(source)(Strategy.Executor(E))
-    ((flow.intersperse(Sep) |> (scalaz.stream.text.utf8Encode)) to io.fileChunkW(out)).run.run
+    ((flow.intersperse(Sep) |> scalaz.stream.text.utf8Encode) to io.fileChunkW(out)).run.run
 
     1 should be equalTo 1
   }
@@ -42,18 +42,18 @@ class FilesSpec extends Specification {
   "Parallel batch file processing. Unordered out" in {
     val out = "testdata/utf8-out1.txt"
 
-    def transform(line: String): Task[String] = Task {
+    def invert(line: String): Task[String] = Task {
       logger.info(s"Read: $line")
-      line./:("")((c, acc) ⇒ acc + c)
+      line.:\(Thread.currentThread().getName + ": ")((c, acc) ⇒ acc + c)
     }(E)
 
     val source = io.linesR(in)
       .chunk(parallelism)
       .flatMap(emitAll)
-      .map(transform(_))
+      .map(invert)
       .gather(parallelism)
 
-    ((source.intersperse(Sep) |> (scalaz.stream.text.utf8Encode)) to io.fileChunkW(out)).run.run
+    ((source.intersperse(Sep) |> scalaz.stream.text.utf8Encode) to io.fileChunkW(out)).run.run
 
     1 should be equalTo 1
   }
