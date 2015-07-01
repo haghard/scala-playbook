@@ -1,11 +1,11 @@
 package processes
 
 import java.util.concurrent.Executors._
+import java.util.concurrent.ForkJoinPool
 
 import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
 
-import scalaz.{ -\/, \/- }
 import scalaz.concurrent.Task
 import scalaz.stream.Process._
 import org.specs2.mutable.Specification
@@ -13,7 +13,7 @@ import scalaz.stream._
 import scalaz.concurrent.Strategy
 
 class BroadcastSpec extends Specification {
-
+  val P = Process
   val logger = Logger.getLogger("broadcast")
 
   /**
@@ -21,11 +21,14 @@ class BroadcastSpec extends Specification {
    *
    */
   def broadcast[A](p: Process[Task, A], subs: Process[Task, String], bound: Int = 10): Process[Task, Unit] = Process.suspend {
-    val P = newFixedThreadPool(2, new NamedThreadFactory("broadcast-pub")) // publish, and fork new consumers
-    val I = Strategy.Executor(P)
+    import scalaz.stream.io
+
+    val PUB = newFixedThreadPool(2, new NamedThreadFactory("broadcast-pub")) // publish, and fork new consumers
+    val I = Strategy.Executor(PUB)
     val S = newFixedThreadPool(1, new NamedThreadFactory("signal"))
     val SIG = Strategy.Executor(S)
-    val Q = newFixedThreadPool(3, new NamedThreadFactory("broadcast-sub")) // could be extended depends on consumer's size
+
+    val Q = new ForkJoinPool(2) // could be extended depends on consumer's size
     val C = Strategy.Executor(Q)
 
     //Behaves like a AtomicReference for Set[Queue[A]]
@@ -64,7 +67,7 @@ class BroadcastSpec extends Specification {
         case opt        ⇒ opt
       }
 
-      p = q.dequeue.onComplete(Process eval_ unsubscribe(q))
+      p = q.dequeue.onComplete(P eval_ unsubscribe(q))
 
       back ← if (result.contains(updatedQs)) Task.delay { logger.info(s"New subscription from $name"); p }
       else subscribe(name)
@@ -74,25 +77,25 @@ class BroadcastSpec extends Specification {
 
     val source = subs.map { n ⇒
       Task.fork {
-        subscribe(n).flatMap { p ⇒
-          p.map(s"${Thread.currentThread().getName} - $n got " + _)
-            .to(scalaz.stream.io.stdOutLines).run
-        }
-      }(P).runAsync(_ ⇒ ())
+        for {
+          t ← subscribe(n)
+          r ← (t.map(s"[${Thread.currentThread().getName}]: $n got " + _) to io.stdOutLines).run
+        } yield r
+      }(PUB).runAsync(_ ⇒ ())
     }
 
     (publisher merge source)(I)
-      .onComplete(Process.eval_(signal.set(Set()).map(_ ⇒ logger.info("Done"))))
+      .onComplete(P.eval_(signal.set(Set()).map(_ ⇒ logger.info("Done"))))
   }
 
   "broadcast" should {
     "run for n" in {
-      val names: Process[Task, String] = Process.emitAll(Seq("Doctor Who", "Sherlock", "Ironman", "Superman"))
-      val subs = (names zip Process.repeatEval(Task.delay(Thread.sleep(4000)))).map(_._1)
+      val names: Process[Task, String] = P.emitAll(Seq("Doctor Who", "Sherlock", "Ironman", "Superman"))
+      val subs = (names zip P.repeatEval(Task.delay(Thread.sleep(4000)))).map(_._1)
 
       def naturals: Process[Task, Long] = {
         def go(i: Long): Process[Task, Long] =
-          Process.await(Task.delay(i)) { i ⇒ Thread.sleep(500); Process.emit(i) ++ go(i + 1l) }
+          P.await(Task.delay(i)) { i ⇒ Thread.sleep(500); P.emit(i) ++ go(i + 1l) }
         go(1l)
       }
 

@@ -182,8 +182,8 @@ class BTreeStructuralRecursionSpec extends Specification {
 
   implicit class TreeSyntax[T](self: Tree[T])(implicit ord: scala.math.Ordering[T]) {
     @tailrec private def scan(searched: T, t: Tree[T]): Option[T] = t match {
-      case Leaf                                    ⇒ None
-      case Node(v, left, right) if (searched == v) ⇒ Option(v)
+      case Leaf                                  ⇒ None
+      case Node(v, left, right) if searched == v ⇒ Option(v)
       case Node(v, left, right) ⇒
         if (ord.lt(searched, v)) {
           println(s"Search: passed: $v")
