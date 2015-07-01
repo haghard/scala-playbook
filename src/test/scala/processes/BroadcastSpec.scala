@@ -89,8 +89,8 @@ class BroadcastSpec extends Specification {
       .onComplete(Process.eval_(signal.set(Set()).map(_ ⇒ logger.info("Done"))))
   }
 
-  "multicast" should {
-    "run" in {
+  "broadcast" should {
+    "run for n" in {
       val names: Process[Task, String] = Process.emitAll(Seq("Doctor Who", "Sherlock", "Ironman", "Superman"))
       val subs = (names zip Process.repeatEval(Task.delay(Thread.sleep(4000)))).map(_._1)
 
