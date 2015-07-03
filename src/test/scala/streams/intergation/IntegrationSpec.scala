@@ -225,7 +225,7 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
       val flow = Flow[Int].map(_ * 2)
         .withAttributes(OperationAttributes.inputBuffer(initial = size * 2, max = size * 2))
 
-      (source.throughAkkaFlow(size, flow)).fold1(_ ++ _)
+      source.throughAkkaFlow(size, flow).fold1(_ ++ _)
         .runLog.run must be === Vector(range.toVector.map(_ * 2))
     }
   }
