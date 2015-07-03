@@ -48,7 +48,7 @@ libraryDependencies ++= Seq(
     "org.scalaz.stream"   %% "scalaz-stream"       %  "0.7.1a"    withSources(),
     "com.typesafe.akka"   %% "akka-actor"          %  Akka      withSources(),
     "com.typesafe.akka"   %% "akka-testkit"        %  Akka,
-    "com.typesafe.akka"   %% "akka-stream-experimental" % "1.0-RC3",
+    "com.typesafe.akka"   %% "akka-stream-experimental" % "1.0-RC4",
     "com.typesafe.akka"   %% "akka-persistence-experimental"     % Akka,
     "io.reactivex"        %% "rxscala"             % "0.25.0",
     "org.monifu"          %% "monifu"              % "1.0-M1",

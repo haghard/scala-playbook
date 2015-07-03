@@ -1,13 +1,13 @@
 package streams.intergation
 
+import akka.stream.scaladsl._
 import java.util.concurrent.Executors._
 import akka.actor.{ ActorRef, ActorSystem }
-import akka.stream.actor.{ ActorSubscriber, ActorPublisher }
-import akka.stream.scaladsl._
-import akka.stream.{ OperationAttributes, ActorFlowMaterializer, ActorFlowMaterializerSettings }
-import akka.testkit.{ ImplicitSender, TestKit }
 import mongo.MongoProgram.NamedThreadFactory
+import akka.testkit.{ ImplicitSender, TestKit }
 import org.scalatest.concurrent.AsyncAssertions.Waiter
+import akka.stream.actor.{ ActorSubscriber, ActorPublisher }
+import akka.stream.{ Attributes, ActorMaterializer, ActorMaterializerSettings }
 import org.scalatest.{ BeforeAndAfterAll, BeforeAndAfterEach, MustMatchers, WordSpecLike }
 
 import scala.concurrent.duration.FiniteDuration
@@ -28,7 +28,7 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
   }
 
   object AkkaContext {
-    implicit val materializer = ActorFlowMaterializer(ActorFlowMaterializerSettings(system)
+    implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system)
       .withDispatcher("akka.flow-dispatcher"))
     implicit val E = streams.ExecutionContextExecutorServiceBridge(materializer.executionContext)
   }
@@ -223,7 +223,7 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
 
       //The example below will ensure that size*2 jobs (but not more) are enqueue from an external process and stored locally in memory
       val flow = Flow[Int].map(_ * 2)
-        .withAttributes(OperationAttributes.inputBuffer(initial = size * 2, max = size * 2))
+        .withAttributes(Attributes.inputBuffer(initial = size * 2, max = size * 2))
 
       source.throughAkkaFlow(size, flow).fold1(_ ++ _)
         .runLog.run must be === Vector(range.toVector.map(_ * 2))
@@ -247,14 +247,14 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
       val akkaSink = akka.stream.scaladsl.Sink.fold[Int, Int](0)(_ + _)
 
       val flow = Flow[Int].map { x ⇒ println(Thread.currentThread().getName); x * 2 }
-        .withAttributes(OperationAttributes.inputBuffer(initial = size * 2, max = size * 2))
+        .withAttributes(Attributes.inputBuffer(initial = size * 2, max = size * 2))
 
       FlowGraph.closed(akkaSource, akkaSink)((_, _)) { implicit b ⇒
         import FlowGraph.Implicits._
         (src, sink) ⇒ src ~> flow ~> sink
       }.run()._2.onComplete(r ⇒ sync.put(r))
 
-      sync.get must be === Success(range.reduce(_ + _) * 2)
+      sync.get must be === Success(range.sum * 2)
     }
   }
 }

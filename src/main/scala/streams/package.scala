@@ -1,6 +1,6 @@
 import java.util.concurrent.{ Executors, ExecutorService }
 import akka.actor.{ ActorRefFactory, PoisonPill, ActorRef }
-import akka.stream.ActorFlowMaterializer
+import akka.stream.ActorMaterializer
 import akka.stream.actor.ActorPublisherMessage.Cancel
 import akka.stream.actor.ActorSubscriberMessage.{ OnComplete, OnError }
 import akka.stream.actor.{ ActorSubscriber, ActorPublisher }
@@ -32,11 +32,8 @@ package object streams { outer ⇒
      * @param materializer
      * @return
      */
-    def toAkkaFlow(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, Unit] =
+    def toAkkaFlow(implicit actorRefFactory: ActorRefFactory, materializer: ActorMaterializer): Process[Task, Unit] =
       outer.createSink(self)
-
-    /*def toAkkaFlow(a: ActorRef)(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, Unit] =
-      outer.createSink0(a, self)*/
 
     /**
      * No practical reasons to have this one
@@ -44,7 +41,7 @@ package object streams { outer ⇒
      * @param materializer
      * @return
      */
-    def sourceToSink(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, I] =
+    def sourceToSink(implicit actorRefFactory: ActorRefFactory, materializer: ActorMaterializer): Process[Task, I] =
       outer.oneByOne(self)
 
     /**
@@ -55,7 +52,7 @@ package object streams { outer ⇒
      * @param materializer
      * @return
      */
-    def throughAkkaFlow(requestSize: Int, f: Flow[I, I, Unit])(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, Vector[I]] =
+    def throughAkkaFlow(requestSize: Int, f: Flow[I, I, Unit])(implicit actorRefFactory: ActorRefFactory, materializer: ActorMaterializer): Process[Task, Vector[I]] =
       outer.throughFlow(self, requestSize, f)
 
     /**
@@ -67,7 +64,7 @@ package object streams { outer ⇒
       akka.stream.scaladsl.Source(ScalazProcessPublisher(self))
   }
 
-  private def throughFlow[I](process: Process[Task, I], batchSize: Int, flow: Flow[I, I, Unit])(implicit arf: ActorRefFactory, m: ActorFlowMaterializer): Process[Task, Vector[I]] = {
+  private def throughFlow[I](process: Process[Task, I], batchSize: Int, flow: Flow[I, I, Unit])(implicit arf: ActorRefFactory, m: ActorMaterializer): Process[Task, Vector[I]] = {
     def halter(pub: ActorRef, sub: ActorRef): Cause ⇒ Process[Task, Vector[I]] = {
       case cause @ Cause.End ⇒
         sub ! OnComplete
@@ -98,7 +95,7 @@ package object streams { outer ⇒
     } yield i).onHalt(halter(pub, sub))
   }
 
-  private def oneByOne[I](process: Process[Task, I])(implicit arf: ActorRefFactory, m: ActorFlowMaterializer): Process[Task, I] = {
+  private def oneByOne[I](process: Process[Task, I])(implicit arf: ActorRefFactory, m: ActorMaterializer): Process[Task, I] = {
     val pub = arf.actorOf(OneByOneSourcePublisher.props[I], name = "seq-pub")
     val sub = arf.actorOf(OneByOneSinkSubscriber.props[I], name = "seq-sub")
     val src = akka.stream.scaladsl.Source(ActorPublisher[I](pub))
@@ -121,15 +118,7 @@ package object streams { outer ⇒
     })
   }
 
-  /*
-  private def createSink0[I](a: ActorRef, process: Process[Task, I])(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, Unit] = {
-    process.onFailure { ex ⇒
-      a ! Cancel
-      P.halt
-    }.to(sink[I](a))
-  }*/
-
-  private def createSink[I](process: Process[Task, I])(implicit actorRefFactory: ActorRefFactory, materializer: ActorFlowMaterializer): Process[Task, Unit] = {
+  private def createSink[I](process: Process[Task, I])(implicit actorRefFactory: ActorRefFactory, materializer: ActorMaterializer): Process[Task, Unit] = {
     val processor = actorRefFactory.actorOf(ProcessorSink.props[I], name = "sink-proc")
     process.onFailure { ex ⇒
       processor ! Cancel
@@ -137,7 +126,7 @@ package object streams { outer ⇒
     }.to(sink[I](processor))
   }
 
-  private def sink[I](processor: ActorRef)(implicit materializer: ActorFlowMaterializer): Sink[Task, I] = {
+  private def sink[I](processor: ActorRef)(implicit materializer: ActorMaterializer): Sink[Task, I] = {
     akka.stream.scaladsl.Source(ActorPublisher[I](processor))
       .to(akka.stream.scaladsl.Sink(ActorSubscriber[I](processor))).run()
     sourceWriter(processor)
