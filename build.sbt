@@ -18,9 +18,9 @@ name := "scala-playbook"
 
 version := "0.0.1-SNAPSHOT"
 
-scalaVersion := "2.11.6"
+scalaVersion := "2.11.7"
 
-val Akka = "2.4-M1" //"2.3.11"
+val Akka = "2.4-M2"
 val Doobie = "0.2.2"
 
 parallelExecution in Test := false
