@@ -10,11 +10,9 @@ import akka.testkit.{ ImplicitSender, TestKit }
 import org.scalatest.{ BeforeAndAfterAll, BeforeAndAfterEach, MustMatchers, WordSpecLike }
 
 import scala.collection.mutable
-import scala.collection.mutable.Buffer
+
 import scala.concurrent.SyncVar
-import scalaz.Alpha.U
-import scalaz.stream.async.mutable.Queue
-import scalaz.stream.{ Channel, async, Sink }
+import scalaz.stream.Channel
 import scalaz.{ \/-, \/ }
 import scalaz.concurrent.{ Strategy, Task }
 
