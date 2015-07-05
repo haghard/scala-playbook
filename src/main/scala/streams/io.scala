@@ -22,7 +22,7 @@ object io {
     case cause @ Cause.Kill ⇒
       Process.Halt(cause)
     case cause @ Cause.Error(ex) ⇒
-      if (ex.getMessage == "IOF") Process.Halt(Cause.End)
+      if (ex.getMessage == "IOS") Process.Halt(Cause.End)
       else Process.Halt(cause)
   }
 
@@ -50,10 +50,11 @@ object io {
 
       def chunkCallback(n: Int): (Throwable \/ Seq[I] ⇒ Unit) ⇒ Unit =
         cb ⇒ {
-          if (n < 0) cb(-\/(new Exception("chunk size must be > 0, was: " + n)))
-
+          if (n < 0)
+            cb(-\/(new Exception("chunk size must be >= 0, was: " + n)))
           val batch = request(n)
-          if (batch.size == 0) cb(-\/(new Exception("IOF")))
+          if (batch.size == 0)
+            cb(-\/(new Exception("IOS")))
           else cb(\/-(batch))
         }
 

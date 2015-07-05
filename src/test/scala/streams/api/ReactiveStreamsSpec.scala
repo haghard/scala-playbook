@@ -1,75 +1,101 @@
 package streams.api
 
-import java.util.concurrent.Executors._
-import org.specs2.mutable.Specification
-import mongo.MongoProgram.NamedThreadFactory
+import java.util.concurrent.{ TimeUnit, CountDownLatch }
+import java.util.concurrent.atomic.AtomicReference
+import org.scalatest.{ WordSpecLike, MustMatchers }
 
 import scala.concurrent.SyncVar
 import scala.concurrent.forkjoin.ThreadLocalRandom
 import scalaz.concurrent.Task
 import scalaz.stream._
 
-class ReactiveStreamsSpec extends Specification {
-
-  def naturals = {
-    def go(i: Int): Process[Task, Int] =
-      Process.await(Task.delay(i))(i ⇒ Process.emit(i) ++ go(i + 1))
-    go(0)
-  }
-
-  implicit val ex = newFixedThreadPool(4, new NamedThreadFactory("pub-sub"))
-
-  "Publisher Subscriber start point implementation" should {
-    "run" in {
-      val s = 15
-      val sync = new SyncVar[Boolean]()
-      val source: Process[Task, Int] = naturals.take(81)
-
-      ScalazProcessPublisher[Int](source)
-        .subscribe(new ProcessSubscriber[Int](s, sync))
-
-      sync.get should be equalTo true
-    }
-  }
-
-  trait CancelableSubscriber[T] extends ProcessSubscriber[T] {
-    var i = 0
-
-    abstract override def onNext(t: T): Unit = {
-      super.onNext(t)
-      i += 1
-      if (i == 100) {
-        subscription.fold(())(_.cancel())
-      }
-    }
-  }
+class ReactiveStreamsSpec extends WordSpecLike with MustMatchers {
+  import Procesess._
 
   trait RandomRequestSubscriber[T] extends ProcessSubscriber[T] {
-    override val updateBufferSize = ThreadLocalRandom.current().nextInt(12, 27)
+    override def updateBufferSize = ThreadLocalRandom.current().nextInt(1, 12)
+  }
+
+  trait OnNextBlowupSubscriber[T] extends ProcessSubscriber[T] {
+    abstract override def onNext(t: T): Unit = {
+      super.onNext(t)
+      throw new Exception("onNext")
+    }
+  }
+
+  trait OneElementSubscriber[T] extends ProcessSubscriber[T] {
+    abstract override def onNext(t: T): Unit = {
+      super.onNext(t)
+      subscription.fold(())(_.cancel())
+    }
   }
 
   "Publisher Subscriber with cancel" should {
     "do cancel" in {
-      val s = 12
-      val sync = new SyncVar[Boolean]()
-      val source: Process[Task, Int] = naturals.take(89)
+      val source: Process[Task, Int] = naturals
+      val latch = new CountDownLatch(1)
 
-      ScalazProcessPublisher[Int](source)
-        .subscribe(new ProcessSubscriber[Int](s, sync) with CancelableSubscriber[Int])
+      ScalazProcessPublisher[Int](source, 189)
+        .subscribe(new ProcessSubscriber1[Int](latch, 10))
 
-      sync.get should be equalTo true
+      assert(latch.await(3, TimeUnit.SECONDS))
     }
   }
 
-  "Publisher Subscriber with different request numbers" should {
+  "Publisher and 3 Subscribers with different request numbers" should {
     "run" in {
-      val sync = new SyncVar[Boolean]()
-      val source: Process[Task, Int] = naturals.take(25146)
+      val Size = 100
+      val sync = new SyncVar[Long]()
+      val errors = new AtomicReference[Throwable]
+      val source: Process[Task, Int] = naturals.map { r ⇒
+        Thread.sleep(ThreadLocalRandom.current().nextInt(100, 150))
+        r
+      }
 
-      ScalazProcessPublisher[Int](source)
-        .subscribe(new ProcessSubscriber[Int](11, sync) with RandomRequestSubscriber[Int])
+      val P = ScalazProcessPublisher[Int](source, Size)
 
-      sync.get should be equalTo true
+      P.subscribe(new ProcessSubscriber[Int](12, sync, errors) with RandomRequestSubscriber[Int])
+      Thread.sleep(3000)
+
+      val sync1 = new SyncVar[Long]()
+      P.subscribe(new ProcessSubscriber[Int](6, sync1, errors) with RandomRequestSubscriber[Int])
+
+      Thread.sleep(2000)
+
+      val sync2 = new SyncVar[Long]()
+      P.subscribe(new ProcessSubscriber[Int](10, sync2, errors) with RandomRequestSubscriber[Int])
+
+      assert(sync1.get > 50)
+      assert(sync2.get > 30)
+      sync.get must be === Size
     }
   }
+
+  "Publisher Subscriber with OnNextBlowupSubscriber" should {
+    "have thrown onNext" in {
+      val sync = new SyncVar[Long]()
+      val source: Process[Task, Int] = naturals
+      val errors = new AtomicReference[Throwable]
+
+      ScalazProcessPublisher[Int](source, 25)
+        .subscribe(new ProcessSubscriber[Int](11, sync, errors) with OnNextBlowupSubscriber[Int])
+
+      sync.get
+      errors.get().getMessage must be === "onNext"
+    }
+  }
+
+  /*"Empty Publisher" should {
+    "complete after first request" in {
+      val sync = new SyncVar[Long]()
+      val errors = new AtomicReference[Throwable]
+      val source: Process[Task, Int] = naturals
+
+      ScalazProcessPublisher[Int](source, 0)
+        .subscribe(new ProcessSubscriber[Int](1, sync, errors))
+
+      sync.get must be === 0
+    }
+  }*/
+
 }

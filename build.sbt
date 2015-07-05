@@ -46,10 +46,10 @@ resolvers += "octalmind"             at "https://dl.bintray.com/guillaumebreton/
 libraryDependencies ++= Seq(
     "org.mongodb"         %  "mongo-java-driver"   %  "2.13.0"  withSources(),
     "org.scalaz.stream"   %% "scalaz-stream"       %  "0.7.1a"    withSources(),
-    "com.typesafe.akka"   %% "akka-actor"          %  Akka      withSources(),
-    "com.typesafe.akka"   %% "akka-testkit"        %  Akka,
+    "com.typesafe.akka"   %% "akka-actor"          %    Akka      withSources(),
+    "com.typesafe.akka"   %% "akka-testkit"        %    Akka,
     "com.typesafe.akka"   %% "akka-stream-experimental" % "1.0-RC4",
-    "com.typesafe.akka"   %% "akka-persistence-experimental"     % Akka,
+    "com.typesafe.akka"   %% "akka-persistence-experimental"    % Akka,
     "io.reactivex"        %% "rxscala"             % "0.25.0",
     "org.monifu"          %% "monifu"              % "1.0-M1",
     "log4j"               %  "log4j"               % "1.2.14",
@@ -70,7 +70,8 @@ libraryDependencies ++= Seq(
 libraryDependencies ++= Seq(
   "de.bwaldvogel"       %   "mongo-java-server"     %   "1.2.0",
   "org.scalatest"       %%  "scalatest"             %   "2.2.5"     %   "test",
-  "org.specs2"          %%  "specs2"                %   "2.4.15"    %   "test"
+  "org.specs2"          %%  "specs2"                %   "2.4.15"    %   "test",
+  "org.reactivestreams" %   "reactive-streams-tck"  %   "1.0.0"     %   "test"
 )
 
 scalacOptions ++= Seq(
