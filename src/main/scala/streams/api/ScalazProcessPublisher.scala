@@ -11,6 +11,17 @@ import scalaz.stream.{ sink, Process, Cause, async }
 object ScalazProcessPublisher {
   def apply[T](source: Process[Task, T], bound: Long = Long.MaxValue) =
     new ScalazProcessPublisher[T](source, bound)
+
+  trait FailedPublisher[T] extends Publisher[T] {
+
+    abstract override def subscribe(subscriber: Subscriber[_ >: T]): Unit = {
+      super.subscribe(subscriber)
+      subscriber.onError(new RuntimeException("Can't subscribe subscriber"))
+    }
+  }
+
+  def failedOnSubscribe[T](source: Process[Task, T], bound: Long = Long.MaxValue) =
+    new ScalazProcessPublisher[T](source, bound) with FailedPublisher[T]
 }
 
 class ScalazProcessPublisher[T] private (source: Process[Task, T], bound: Long) extends Publisher[T] {
