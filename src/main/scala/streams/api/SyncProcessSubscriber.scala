@@ -1,11 +1,9 @@
 package streams.api
 
-import java.util.concurrent.atomic.{ AtomicInteger, AtomicReference }
-
 import org.apache.log4j.Logger
-import org.reactivestreams.{ Subscription, Subscriber }
-
 import scala.concurrent.SyncVar
+import org.reactivestreams.{ Subscription, Subscriber }
+import java.util.concurrent.atomic.{ AtomicInteger, AtomicReference }
 
 /**
  * SyncProcessSubscriber is an implementation of Reactive Streams `Subscriber`,
@@ -37,8 +35,14 @@ class SyncProcessSubscriber[T](batchSize: Int, val sync: SyncVar[Long], error: A
   }
 
   override def onSubscribe(sub: Subscription): Unit = {
-    subscription = Some(sub)
-    sub request bs.get()
+    if (sub == null) throw null
+
+    if (subscription.isDefined) {
+      sub.cancel()
+    } else {
+      subscription = Some(sub)
+      sub request bs.get()
+    }
   }
 
   override def onComplete(): Unit = {
