@@ -57,10 +57,9 @@ package object streams { outer ⇒
 
     /**
      *
-     * @param ex
      * @return
      */
-    def toPublisher(implicit ex: ExecutorService): akka.stream.scaladsl.Source[I, Unit] =
+    def toAkkaSource(implicit ex: ExecutorService): akka.stream.scaladsl.Source[I, Unit] =
       akka.stream.scaladsl.Source(ScalazProcessPublisher(self))
   }
 

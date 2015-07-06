@@ -17,6 +17,7 @@ class SyncProcessSubscriber[T](batchSize: Int, val sync: SyncVar[Long], error: A
 
   override def onNext(t: T): Unit = {
     logger.info(s"onNext: $t")
+
     acc.getAndIncrement()
     bs.decrementAndGet()
     if (bs.get() == 0) {
@@ -28,6 +29,8 @@ class SyncProcessSubscriber[T](batchSize: Int, val sync: SyncVar[Long], error: A
   protected def updateBufferSize() = batchSize
 
   override def onError(throwable: Throwable): Unit = {
+    if (throwable == null) throw null
+
     logger.info(s"Error ${throwable.getMessage}")
     subscription = None
     error.set(throwable)
@@ -46,7 +49,7 @@ class SyncProcessSubscriber[T](batchSize: Int, val sync: SyncVar[Long], error: A
   }
 
   override def onComplete(): Unit = {
-    logger.info("ProcessSubscriber onComplete")
+    logger.info("onComplete")
     subscription = None
     sync.put(acc.get())
   }

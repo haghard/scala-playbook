@@ -1,9 +1,7 @@
 package streams.intergation
 
 import akka.stream.scaladsl._
-import java.util.concurrent.Executors._
 import akka.actor.{ ActorRef, ActorSystem }
-import mongo.MongoProgram.NamedThreadFactory
 import akka.testkit.{ ImplicitSender, TestKit }
 import org.scalatest.concurrent.AsyncAssertions.Waiter
 import akka.stream.actor.{ ActorSubscriber, ActorPublisher }
@@ -241,9 +239,8 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
     "run" in {
       val size = 8
       val sync = new SyncVar[Try[Int]]()
-      implicit val ex = newFixedThreadPool(2, new NamedThreadFactory("pub-sub"))
 
-      val akkaSource = P.emitAll(range).toPublisher
+      val akkaSource = P.emitAll(range).toAkkaSource
       val akkaSink = akka.stream.scaladsl.Sink.fold[Int, Int](0)(_ + _)
 
       val flow = Flow[Int].map { x ⇒ println(Thread.currentThread().getName); x * 2 }

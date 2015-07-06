@@ -9,7 +9,6 @@ import scalaz.stream.{ Cause, Process }
 import scala.language.higherKinds
 
 object io {
-
   val gracefulExitMessage = "IOS"
 
   trait ChunkResource[I] {
@@ -32,7 +31,7 @@ object io {
     new Traversable[I] with ChunkResource[I] {
       val P = Process
       var cur = p
-      var buffer: Seq[I] = Nil
+      var buffer: Vector[I] = Vector.empty[I]
 
       def Try[F[_], A](p: ⇒ Process[F, A]): Process[F, A] =
         try p catch {
@@ -47,22 +46,22 @@ object io {
         go(10)
       }
 
-      override def chunk(n: Int): Process[Task, Seq[I]] =
+      override def chunk(n: Int): Process[Task, Vector[I]] =
         P.eval(Task.async(chunkCallback(n)))
 
-      def chunkCallback(n: Int): (Throwable \/ Seq[I] ⇒ Unit) ⇒ Unit =
+      def chunkCallback(n: Int): (Throwable \/ Vector[I] ⇒ Unit) ⇒ Unit =
         cb ⇒ {
           if (n < 0)
             cb(-\/(new Exception("chunk size must be >= 0, was: " + n)))
+
           val batch = request(n)
-          if (batch.size == 0)
-            cb(-\/(new Exception(gracefulExitMessage)))
+          if (batch.isEmpty) cb(-\/(new Exception(gracefulExitMessage)))
           else cb(\/-(batch))
         }
 
-      override def request(n: Int): Seq[I] =
+      override def request(n: Int): Vector[I] =
         buffer match {
-          case Nil ⇒
+          case list if (list.isEmpty) ⇒
             fetchBuffer(n, 0)
             readN(n)
           case list ⇒
@@ -74,8 +73,8 @@ object io {
             }
         }
 
-      private def readN(n: Int) = {
-        val (r, rest) = buffer.splitAt(n)
+      private def readN(n: Int): Vector[I] = {
+        val (r, rest) = buffer splitAt n
         buffer = rest
         r
       }

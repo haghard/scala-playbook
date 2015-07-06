@@ -1,16 +1,19 @@
 package streams.api
 
-import java.util.concurrent.{ TimeUnit, CountDownLatch }
+import java.util.concurrent.{ ExecutorService, TimeUnit, CountDownLatch }
 import java.util.concurrent.atomic.AtomicReference
 import org.scalatest.{ WordSpecLike, MustMatchers }
 
 import scala.concurrent.SyncVar
-import scala.concurrent.forkjoin.ThreadLocalRandom
+import scala.concurrent.forkjoin.{ ForkJoinPool, ThreadLocalRandom }
 import scalaz.concurrent.Task
 import scalaz.stream._
 
 class ReactiveStreamsSpec extends WordSpecLike with MustMatchers {
   import Procesess._
+
+  implicit val E: ExecutorService =
+    new ForkJoinPool(Runtime.getRuntime.availableProcessors() * 2)
 
   trait RandomRequestSubscriber[T] extends SyncProcessSubscriber[T] {
     override def updateBufferSize() = ThreadLocalRandom.current().nextInt(1, 12)
@@ -35,7 +38,7 @@ class ReactiveStreamsSpec extends WordSpecLike with MustMatchers {
       val source: Process[Task, Int] = naturals
       val latch = new CountDownLatch(1)
 
-      ScalazProcessPublisher[Int](source, 189)
+      ScalazProcessPublisher[Int](source.take(189))
         .subscribe(new SyncProcessSubscriber1[Int](latch, 10))
 
       assert(latch.await(3, TimeUnit.SECONDS))
@@ -48,7 +51,7 @@ class ReactiveStreamsSpec extends WordSpecLike with MustMatchers {
       val source: Process[Task, Int] = naturals
       val errors = new AtomicReference[Throwable]
 
-      ScalazProcessPublisher[Int](source, 25)
+      ScalazProcessPublisher[Int](source.take(25))
         .subscribe(new SyncProcessSubscriber[Int](11, sync, errors) with OnNextBlowupSubscriber[Int])
 
       sync.get
@@ -66,7 +69,7 @@ class ReactiveStreamsSpec extends WordSpecLike with MustMatchers {
         r
       }
 
-      val P = ScalazProcessPublisher[Int](source, Size)
+      val P = ScalazProcessPublisher[Int](source.take(Size))
 
       P.subscribe(new SyncProcessSubscriber[Int](26, sync, errors) with RandomRequestSubscriber[Int])
       Thread.sleep(1500)

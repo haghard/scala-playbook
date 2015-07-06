@@ -5,7 +5,6 @@ import java.util.concurrent.Executors._
 
 import akka.actor._
 import mongo.MongoProgram.NamedThreadFactory
-import org.apache.log4j.Logger
 import akka.testkit.{ ImplicitSender, TestKit }
 import org.scalatest.{ BeforeAndAfterAll, BeforeAndAfterEach, MustMatchers, WordSpecLike }
 
@@ -16,13 +15,11 @@ import scalaz.stream.Channel
 import scalaz.{ \/-, \/ }
 import scalaz.concurrent.{ Strategy, Task }
 
-class AskSpec extends TestKit(ActorSystem("Integration"))
+class ActorStreamIntegrationSpec extends TestKit(ActorSystem("Integration"))
     with WordSpecLike with MustMatchers
     with BeforeAndAfterEach
     with BeforeAndAfterAll
     with ImplicitSender {
-
-  private val logger = Logger.getLogger("integration")
 
   import akka.actor.ActorDSL._
   import scala.concurrent.duration._
@@ -36,7 +33,7 @@ class AskSpec extends TestKit(ActorSystem("Integration"))
 
   val P = Process
 
-  //Mutable state lives there
+  //Mutable state lives here
   def actorChannel = actor(new Act {
     private var history = List[Int]()
     become {
