@@ -7,7 +7,6 @@ import org.reactivestreams.{ Subscription, Subscriber }
 
 import scala.concurrent.SyncVar
 
-
 /**
  * SyncProcessSubscriber is an implementation of Reactive Streams `Subscriber`,
  * it runs synchronously (on the Publisher's thread) and invokes a user-defined method to process each element.
