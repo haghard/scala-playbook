@@ -7,23 +7,28 @@ import org.reactivestreams.{ Subscription, Subscriber }
 
 import scala.concurrent.SyncVar
 
-class ProcessSubscriber[T](batchSize: Int, val sync: SyncVar[Long], error: AtomicReference[Throwable]) extends Subscriber[T] {
-  val logger = Logger.getLogger("process-sub")
+
+/**
+ * SyncProcessSubscriber is an implementation of Reactive Streams `Subscriber`,
+ * it runs synchronously (on the Publisher's thread) and invokes a user-defined method to process each element.
+ */
+class SyncProcessSubscriber[T](batchSize: Int, val sync: SyncVar[Long], error: AtomicReference[Throwable]) extends Subscriber[T] {
+  private val logger = Logger.getLogger("process-sub")
   private val acc = new AtomicInteger(0)
-  protected var bs = new AtomicInteger(batchSize)
+  protected val bs = new AtomicInteger(batchSize)
   protected var subscription: Option[Subscription] = None
 
   override def onNext(t: T): Unit = {
-    logger.info(s"onNext: $t ${##}")
+    logger.info(s"onNext: $t")
     acc.getAndIncrement()
     bs.decrementAndGet()
     if (bs.get() == 0) {
-      bs.set(updateBufferSize)
+      bs.set(updateBufferSize())
       subscription.fold(())(_.request(bs.get()))
     }
   }
 
-  protected def updateBufferSize = batchSize
+  protected def updateBufferSize() = batchSize
 
   override def onError(throwable: Throwable): Unit = {
     logger.info(s"Error ${throwable.getMessage}")

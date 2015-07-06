@@ -10,6 +10,8 @@ import scala.language.higherKinds
 
 object io {
 
+  val gracefulExitMessage = "IOS"
+
   trait ChunkResource[I] {
     def request(n: Int): Seq[I]
     def chunk(n: Int): Process[Task, Seq[I]]
@@ -22,7 +24,7 @@ object io {
     case cause @ Cause.Kill ⇒
       Process.Halt(cause)
     case cause @ Cause.Error(ex) ⇒
-      if (ex.getMessage == "IOS") Process.Halt(Cause.End)
+      if (ex.getMessage == gracefulExitMessage) Process.Halt(Cause.End)
       else Process.Halt(cause)
   }
 
@@ -54,7 +56,7 @@ object io {
             cb(-\/(new Exception("chunk size must be >= 0, was: " + n)))
           val batch = request(n)
           if (batch.size == 0)
-            cb(-\/(new Exception("IOS")))
+            cb(-\/(new Exception(gracefulExitMessage)))
           else cb(\/-(batch))
         }
 

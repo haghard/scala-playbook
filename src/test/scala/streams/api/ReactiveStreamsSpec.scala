@@ -12,18 +12,18 @@ import scalaz.stream._
 class ReactiveStreamsSpec extends WordSpecLike with MustMatchers {
   import Procesess._
 
-  trait RandomRequestSubscriber[T] extends ProcessSubscriber[T] {
-    override def updateBufferSize = ThreadLocalRandom.current().nextInt(1, 12)
+  trait RandomRequestSubscriber[T] extends SyncProcessSubscriber[T] {
+    override def updateBufferSize() = ThreadLocalRandom.current().nextInt(1, 12)
   }
 
-  trait OnNextBlowupSubscriber[T] extends ProcessSubscriber[T] {
+  trait OnNextBlowupSubscriber[T] extends SyncProcessSubscriber[T] {
     abstract override def onNext(t: T): Unit = {
       super.onNext(t)
       throw new Exception("onNext")
     }
   }
 
-  trait OneElementSubscriber[T] extends ProcessSubscriber[T] {
+  trait OneElementSubscriber[T] extends SyncProcessSubscriber[T] {
     abstract override def onNext(t: T): Unit = {
       super.onNext(t)
       subscription.fold(())(_.cancel())
@@ -54,19 +54,19 @@ class ReactiveStreamsSpec extends WordSpecLike with MustMatchers {
 
       val P = ScalazProcessPublisher[Int](source, Size)
 
-      P.subscribe(new ProcessSubscriber[Int](12, sync, errors) with RandomRequestSubscriber[Int])
-      Thread.sleep(3000)
+      P.subscribe(new SyncProcessSubscriber[Int](26, sync, errors) with RandomRequestSubscriber[Int])
+      Thread.sleep(500)
 
       val sync1 = new SyncVar[Long]()
-      P.subscribe(new ProcessSubscriber[Int](6, sync1, errors) with RandomRequestSubscriber[Int])
+      P.subscribe(new SyncProcessSubscriber[Int](2, sync1, errors) with RandomRequestSubscriber[Int])
 
-      Thread.sleep(2000)
+      Thread.sleep(500)
 
       val sync2 = new SyncVar[Long]()
-      P.subscribe(new ProcessSubscriber[Int](10, sync2, errors) with RandomRequestSubscriber[Int])
+      P.subscribe(new SyncProcessSubscriber[Int](3, sync2, errors) with RandomRequestSubscriber[Int])
 
-      assert(sync1.get > 50)
-      assert(sync2.get > 30)
+      sync1.get
+      sync2.get
       sync.get must be === Size
     }
   }
@@ -78,24 +78,10 @@ class ReactiveStreamsSpec extends WordSpecLike with MustMatchers {
       val errors = new AtomicReference[Throwable]
 
       ScalazProcessPublisher[Int](source, 25)
-        .subscribe(new ProcessSubscriber[Int](11, sync, errors) with OnNextBlowupSubscriber[Int])
+        .subscribe(new SyncProcessSubscriber[Int](11, sync, errors) with OnNextBlowupSubscriber[Int])
 
       sync.get
       errors.get().getMessage must be === "onNext"
     }
   }
-
-  /*"Empty Publisher" should {
-    "complete after first request" in {
-      val sync = new SyncVar[Long]()
-      val errors = new AtomicReference[Throwable]
-      val source: Process[Task, Int] = naturals
-
-      ScalazProcessPublisher[Int](source, 0)
-        .subscribe(new ProcessSubscriber[Int](1, sync, errors))
-
-      sync.get must be === 0
-    }
-  }*/
-
 }
