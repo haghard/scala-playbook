@@ -9,7 +9,7 @@ import scalaz.stream.{ Cause, Process }
 import scala.language.higherKinds
 
 object io {
-  val gracefulExitMessage = "IOS"
+  val exitMessage = "IOS"
 
   trait ChunkResource[I] {
     def request(n: Int): Seq[I]
@@ -23,7 +23,7 @@ object io {
     case cause @ Cause.Kill ⇒
       Process.Halt(cause)
     case cause @ Cause.Error(ex) ⇒
-      if (ex.getMessage == gracefulExitMessage) Process.Halt(Cause.End)
+      if (ex.getMessage == exitMessage) Process.Halt(Cause.End)
       else Process.Halt(cause)
   }
 
@@ -55,13 +55,13 @@ object io {
             cb(-\/(new Exception("chunk size must be >= 0, was: " + n)))
 
           val batch = request(n)
-          if (batch.isEmpty) cb(-\/(new Exception(gracefulExitMessage)))
+          if (batch.isEmpty) cb(-\/(new Exception(exitMessage)))
           else cb(\/-(batch))
         }
 
       override def request(n: Int): Vector[I] =
         buffer match {
-          case list if (list.isEmpty) ⇒
+          case list if list.isEmpty ⇒
             fetchBuffer(n, 0)
             readN(n)
           case list ⇒

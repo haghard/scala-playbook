@@ -145,4 +145,32 @@ class TaskSpec extends Specification {
       r1.get should be equalTo \/-("cpu-worker-thread-1-x - cpu-worker-thread-2-y")
     }
   }
+
+  /*
+  "sdfsdf" should {
+    "run" in {
+      import scalaz.EitherT._
+
+      val service = (x: String) ⇒
+        Task(\/.fromTryCatchThrowable[Int, NumberFormatException](x.toInt))
+
+      val result: Task[NumberFormatException \/ Int] = (for {
+        a ← service("1") |> eitherT
+        b ← service("2") |> eitherT
+      } yield a + b).run
+
+      trait Convertor[A] {
+        def toInt(v: A): Int
+      }
+
+      def service[T <: { def toInt(l: String): Int }] = scalaz.Reader /*[T, Task]*/ { (c: T) ⇒
+        (x: String) ⇒
+          Task(\/.fromTryCatchThrowable[Int, NumberFormatException](c toInt x))
+      }
+
+      service[Convertor[Int]].run
+
+      1 === 1
+    }
+  }*/
 }
