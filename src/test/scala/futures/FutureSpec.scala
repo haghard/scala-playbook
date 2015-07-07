@@ -37,7 +37,6 @@ class FutureSpec extends Specification {
     p.tryCompleteWith(Future {
       val thread = Thread.currentThread
       threadRef.set(thread)
-      logger.info(s"tryCompleteWith $threadRef")
       try cb(f) finally {
         val wasInterrupted = (threadRef getAndSet null) ne thread
         logger.info(s"interrupted flag $wasInterrupted")
@@ -56,17 +55,16 @@ class FutureSpec extends Specification {
   /**
    *
    * @param cancellableWork
-   * @tparam T
    * @return
    */
-  def delayed[T](cancellableWork: Future[T]): T = {
+  def delayed(cancellableWork: Future[Int]): Int = {
     try {
       val latch = new CountDownLatch(1)
       latch.await(2, TimeUnit.SECONDS)
     } catch {
       case e: Exception ⇒ logger.info("Future was interruptedException")
     }
-    1.asInstanceOf[T]
+    1
   }
 
   "InterruptableFuture" should {
