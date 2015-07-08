@@ -127,7 +127,7 @@ class TaskSpec extends Specification {
             logger.info("Y stop")
             Thread.currentThread().getName + "-y"
           }(executor)
-        ).kleisliR //kleisli
+        ).kleisliR
 
         (x, y) = pair
       } yield { s"$x - $y" }
@@ -146,31 +146,166 @@ class TaskSpec extends Specification {
     }
   }
 
-  /*
-  "sdfsdf" should {
-    "run" in {
+  import scalaz._
+  import Scalaz._
+
+  val serviceR = (x: String) ⇒
+    Task(\/.fromTryCatchThrowable[Int, NumberFormatException](x.toInt))
+
+  def serviceV(x: String): ValidationNel[String, Int] = try {
+    val r = x.toInt
+    if (r > 5) r.success
+    else s"$r should be > 5".failureNel
+  } catch {
+    case e: Exception ⇒ e.getMessage.failureNel
+  }
+
+  "Task error handling with EitherT" should {
+    "run failed with first error" in {
       import scalaz.EitherT._
 
-      val service = (x: String) ⇒
-        Task(\/.fromTryCatchThrowable[Int, NumberFormatException](x.toInt))
+      val flow: Task[NumberFormatException \/ Int] =
+        (for {
+          a ← serviceR("a") |> eitherT
+          b ← serviceR("b") |> eitherT
+        } yield (a + b)).run
 
-      val result: Task[NumberFormatException \/ Int] = (for {
-        a ← service("1") |> eitherT
-        b ← service("2") |> eitherT
-      } yield a + b).run
-
-      trait Convertor[A] {
-        def toInt(v: A): Int
-      }
-
-      def service[T <: { def toInt(l: String): Int }] = scalaz.Reader /*[T, Task]*/ { (c: T) ⇒
-        (x: String) ⇒
-          Task(\/.fromTryCatchThrowable[Int, NumberFormatException](c toInt x))
-      }
-
-      service[Convertor[Int]].run
-
-      1 === 1
+      val r = flow.run
+      logger.info(r)
+      //new NumberFormatException("For input string: "a""))
+      r.isLeft === true
     }
-  }*/
+  }
+
+  "Error accumulation with ValidationNel" should {
+    "run succeed" in {
+      val flowV = (serviceV("a") |@| serviceV("5")) {
+        case (a, b) ⇒ s"serviceA result:$a  serviceV result:$b"
+      }
+
+      flowV.isFailure === false
+      flowV.shows must_=== "Failure([\"For input string: \"a\"\",\"5 should be > 5\"])"
+    }
+  }
+
+  "Task error handling with EitherT" should {
+    "run succeed" in {
+      import scalaz._
+      import Scalaz._
+      import scalaz.EitherT._
+
+      val flow: Task[NumberFormatException \/ Int] =
+        (for {
+          a ← serviceR("1") |> eitherT
+          b ← serviceR("2") |> eitherT
+        } yield (a + b)).run
+
+      flow.run should be equalTo \/-(3)
+    }
+  }
+
+  "Task error handling with EitherT" should {
+    "run failed with first error" in {
+      import scalaz._
+      import Scalaz._
+      import scalaz.EitherT._
+
+      val flow: Task[NumberFormatException \/ Int] =
+        (for {
+          a ← serviceR("a") |> eitherT
+          b ← serviceR("b") |> eitherT
+        } yield (a + b)).run
+
+      val r = flow.run
+      logger.info(r)
+      //new NumberFormatException("For input string: "a""))
+      r.isLeft === true
+    }
+  }
+
+  trait Op[A] {
+    def sum(f: A, s: A): A
+  }
+
+  object Op {
+
+    implicit object StrCont extends Op[String] {
+      override def sum(f: String, s: String): String = (f.toInt + s.toInt).toString
+    }
+
+    implicit object DoubleCont extends Op[Double] {
+      override def sum(f: Double, s: Double): Double = f + s
+    }
+
+    implicit object IntCont extends Op[Int] {
+      override def sum(f: Int, s: Int): Int = {
+        if (f > 5) throw new Exception(s" $f should be < 5 ")
+        if (s > 5) throw new Exception(s" $s should be < 5 ")
+        f + s
+      }
+    }
+
+  }
+
+  def sReader[T: Op] = scalaz.Reader { (left: T) ⇒
+    (right: T) ⇒ {
+      val c = implicitly[Op[T]]
+      Task(\/.fromTryCatchThrowable[T, Exception](c.sum(left, right))).map {
+        case \/-(r)  ⇒ \/-(r)
+        case -\/(ex) ⇒ -\/(ex.getMessage)
+      }
+    }
+  }
+
+  "Task error handling with Reader" should {
+    "run succeed" in {
+      sReader[Int].run(1)(2).run should be equalTo \/-(3)
+    }
+  }
+
+  "Task error handling with Reader" should {
+    "run failed with first error" in {
+      val r = sReader[String].run("asw")("2").run
+      logger.info(r)
+      //-\/(java.lang.NumberFormatException: For input string: "asw")
+      r.isLeft === true
+    }
+  }
+
+  "Task error handling with 2 independent Readers" should {
+    "composition" in {
+
+      val x = sReader[Int].run(1)
+      val y = sReader[Int].run(2)
+
+      val f = for {
+        a ← x(3)
+        b ← y(6)
+      } yield (a |+| b)
+
+      val result = f.run
+      result should be equalTo -\/(" 6 should be < 5 ")
+    }
+  }
+
+  "Task error handling with 2 dependent Readers" should {
+    "composition" in {
+
+      val flow = sReader[Int] >==> {
+        v ⇒
+          {
+            for {
+              x ← v(2)
+              y ← x match {
+                case \/-(r)  ⇒ sReader[Int].apply(r)(6)
+                case -\/(ex) ⇒ Task.now[String \/ Int](-\/(ex))
+              }
+            } yield y
+          }
+      }
+
+      val r = flow.run(1).run
+      r should be equalTo -\/(" 6 should be < 5 ")
+    }
+  }
 }

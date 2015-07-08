@@ -125,8 +125,10 @@ class ScalazTypeClassesSpec extends Specification {
       val s: scala.Option[Int] = scalaz.Scalaz.none
       1.point[Option].map(_ + 2) === Some(3)
 
-      //<* take left hand side and discard left if they both successes
+      //<* take left hand side and discard right if they both successes
       1.some <* 2.some === Some(1)
+
+      //*> take right hand side and discard left if they both successes
       1.some *> 2.some === Some(2)
 
       //take left
@@ -143,7 +145,7 @@ class ScalazTypeClassesSpec extends Specification {
       val f = { x: Int ⇒ x + 3 }.point[Option]
       val f1 = 9.some <*> ((x: Int, y: Int) ⇒ x + y).curried.some
 
-      9.some.<*>(f) === Some(9)
+      9.some.<*>(f) === Some(12)
       3.some.<*>(f1) === Some(12)
     }
 
