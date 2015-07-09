@@ -25,7 +25,7 @@ class TaskSpec extends Specification {
           for {
             x ← fib(n - 1)
             y ← fib(n - 2)
-          } yield (x + y)
+          } yield x + y
       }
       //run/attemptRun is like get on Future
       fib(15).attemptRun should be equalTo \/-(987)
@@ -36,12 +36,11 @@ class TaskSpec extends Specification {
     "run in pool" in {
       def fib(n: Int): Task[Int] = n match {
         case 0 | 1 ⇒ Task now 1
-        case n ⇒ {
+        case n ⇒
           val ND = Nondeterminism[Task]
           for {
             r ← ND.mapBoth(Task.fork(fib(n - 1)), Task.fork(fib(n - 2)))(_ + _)
           } yield { logger.info(r); r }
-        }
       }
       fib(15).attemptRun should be equalTo \/-(987)
     }
@@ -281,7 +280,7 @@ class TaskSpec extends Specification {
       val f = for {
         a ← x(3)
         b ← y(6)
-      } yield (a |+| b)
+      } yield a |+| b
 
       val result = f.run
       result should be equalTo -\/(" 6 should be < 5 ")

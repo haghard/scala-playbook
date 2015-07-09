@@ -14,7 +14,7 @@ object io {
   trait ChunkResource[I] {
     def request(n: Int): Seq[I]
     def chunk(n: Int): Process[Task, Seq[I]]
-    def chunkN: Process[Task, Seq[I]]
+    def chunkConstant(n: Int): Process[Task, Seq[I]]
   }
 
   def batcherHalter[I]: Cause ⇒ Process[Task, Seq[I]] = {
@@ -38,12 +38,15 @@ object io {
           case e: Throwable ⇒ P.fail(e)
         }
 
-      override def chunkN: Process[Task, Seq[I]] = {
+      override def chunkConstant(n: Int): Process[Task, Seq[I]] = {
+        if (n < 0) throw new Exception("chunk size must be >= 0, was: " + n)
+
         def go(i: Int): Process[Task, Seq[I]] =
-          P.await(Task.delay(request(i))) { seq ⇒
-            if (seq.size < i) P.emit(seq) ++ P.halt else P.emit(seq) ++ go(i)
+          P.await(Task.delay(request(i))) { batch ⇒
+            if (batch.isEmpty) throw new Exception(exitMessage)
+            if (batch.size < i) P.emit(batch) ++ P.halt else P.emit(batch) ++ go(i)
           }
-        go(10)
+        go(n)
       }
 
       override def chunk(n: Int): Process[Task, Vector[I]] =

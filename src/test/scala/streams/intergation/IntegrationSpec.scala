@@ -101,7 +101,7 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
       (even to Peven.writer[Int]).run.runAsync(_ ⇒ ())
 
       val zipper = tee[Int](Podd, Peven) map { v ⇒ s"${v._1} - ${v._2}" }
-      (zipper.toMat(Sink.foreach(x ⇒ println(s"read: $x")))(Keep.right))
+      zipper.toMat(Sink.foreach(x ⇒ println(s"read: $x")))(Keep.right)
         .run()
         .onComplete { _ ⇒ sync.put(true) }
 

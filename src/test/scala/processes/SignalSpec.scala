@@ -1,6 +1,8 @@
 package processes
 
 import java.util.concurrent.Executors._
+import java.util.concurrent.ForkJoinPool
+import java.util.concurrent.atomic.AtomicLong
 import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
 import mongo.MongoProgram.NamedThreadFactory
@@ -13,42 +15,56 @@ import scalaz.stream._
 class SignalSpec extends Specification {
   val P = scalaz.stream.Process
 
-  private val logger = Logger.getLogger("proc-signal")
+  def LoggerOut[T, E](logger: Logger) = sink.lift[Task, Int] { (s: Int) ⇒
+    Task.now(logger.info(s"latest value $s"))
+  }
 
-  def LoggerOut[T, E] = sink.lift[Task, Int]((s: Int) ⇒
-    Task.delay(logger.info(s"${Thread.currentThread().getName} - intermediate value $s")))
-
-  "3 writer in 1 signal" should {
-    "change mutable state" in {
+  "N writer and 2 readers through signal" should {
+    "accumulate mutable state and read latest known value" in {
       val ND = Nondeterminism[Task]
-      val sync = new SyncVar[Throwable \/ Unit]
       val syncResult = new SyncVar[Int]
+      implicit val writers = new ForkJoinPool(5)
 
-      implicit val worker = newFixedThreadPool(3, new NamedThreadFactory("worker"))
-      val signal = async.signalOf(0)(Strategy.Executor(newFixedThreadPool(1, new NamedThreadFactory("signal"))))
+      val reader = Strategy.Executor(newFixedThreadPool(2, new NamedThreadFactory("reader")))
+      val signal = async.signalOf(0)(reader)
 
-      (signal.discrete observe LoggerOut)
-        .onComplete(Process.eval(Task.delay(println("signal done"))))
-        .run.runAsync(sync.put)
+      val counter0 = new AtomicLong()
+      signal.discrete
+        .dropWhile { _ => counter0.incrementAndGet() % 50000 != 0 }
+        .to(LoggerOut(Logger.getLogger("reader-0")))
+        .onComplete(Process.eval_(Task.delay(println("signal 0 done"))))
+        .run.runAsync(_=>())
 
-      val f: (Unit, Unit, Unit) ⇒ Unit =
-        (a, b, c) ⇒
-          ()
+      val counter1 = new AtomicLong()
+      signal.discrete
+        .dropWhile { _ => counter1.incrementAndGet() % 50000 != 0 }
+        .to(LoggerOut(Logger.getLogger("reader-1")))
+        .onComplete(Process.eval_(Task.delay(println("signal 1 done"))))
+        .run.runAsync(_=> ())
 
-      def proc = P.emitAll(0 to 10) |> process1.lift { i ⇒
-        logger.info(s"${Thread.currentThread().getName} - calculate value $i")
-        signal.compareAndSet(arg ⇒ Some(arg.getOrElse(0) + i)).run
+      val f: (Unit, Unit, Unit, Unit, Unit) ⇒ Unit = (a,b,c,d,e) ⇒ ()
+
+      def writer(id: Int) = P.emitAll(0 to 10000) map { i ⇒
+        signal.compareAndSet(v ⇒ Some(v.getOrElse(0) + i)).run
         ()
       }
 
-      ND.nmap3(Task.fork(proc.run[Task]), Task.fork(proc.run[Task]), Task.fork(proc.run[Task]))(f)
-        .runAsync { _ ⇒
-          syncResult.put(signal.get.run)
-          signal.close.run
-        }
+      val start = System.nanoTime()
+      ND.nmap5(
+        Task.fork(writer(1).run[Task]),
+        Task.fork(writer(2).run[Task]),
+        Task.fork(writer(3).run[Task]),
+        Task.fork(writer(4).run[Task]),
+        Task.fork(writer(5).run[Task])
+      )(f)
+      .runAsync { _ ⇒
+        val result = signal.get.run
+        println(s"""Duration: ${System.nanoTime() - start} : $result""")
+        syncResult.put(result)
+        signal.close.run
+      }
 
-      sync.get should be equalTo \/-(())
-      syncResult.get should be equalTo 165
+      syncResult.get === 50005000 * 5
     }
   }
 }

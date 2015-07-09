@@ -66,7 +66,7 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
       val ioExecutor = newFixedThreadPool(4, new NamedThreadFactory("io-executor"))
       val fanOut = Strategy.Executor(newFixedThreadPool(1, new NamedThreadFactory("fan-out")))
 
-      val sum = range.foldLeft(0)(_ + _)
+      val sum = range.sum
       val sync = new SyncVar[Throwable \/ IndexedSeq[Int]]
 
       def resource(url: Int): Process[Task, Int] = P.eval(Task {
@@ -85,7 +85,7 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
       }.runLog
         .runAsync(sync.put)
 
-      sync.get should be equalTo (\/-(IndexedSeq(sum)))
+      sync.get should be equalTo \/-(IndexedSeq(sum))
     }
   }
 
@@ -137,7 +137,7 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
   def broadcast2[T](source: Process[Task, T], limit: Int = 10)(implicit S: scalaz.concurrent.Strategy): Process[Task, (Process[Task, T], Process[Task, T])] = {
     val left = async.boundedQueue[T](limit)
     val right = async.boundedQueue[T](limit)
-    val qWriter = (source observe (left.enqueue) observe (right.enqueue)).drain
+    val qWriter = (source observe left.enqueue observe right.enqueue).drain
       .onComplete(Process.eval_ { logger.info("All input was scheduled."); left.close.flatMap(_ ⇒ right.close) })
     (qWriter.drain merge P.emit((left.dequeue, right.dequeue)))
   }
