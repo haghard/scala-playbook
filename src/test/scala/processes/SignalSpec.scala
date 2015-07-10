@@ -30,19 +30,19 @@ class SignalSpec extends Specification {
 
       val counter0 = new AtomicLong()
       signal.discrete
-        .dropWhile { _ => counter0.incrementAndGet() % 50000 != 0 }
+        .dropWhile { _ ⇒ counter0.incrementAndGet() % 50000 != 0 }
         .to(LoggerOut(Logger.getLogger("reader-0")))
         .onComplete(Process.eval_(Task.delay(println("signal 0 done"))))
-        .run.runAsync(_=>())
+        .run.runAsync(_ ⇒ ())
 
       val counter1 = new AtomicLong()
       signal.discrete
-        .dropWhile { _ => counter1.incrementAndGet() % 50000 != 0 }
+        .dropWhile { _ ⇒ counter1.incrementAndGet() % 50000 != 0 }
         .to(LoggerOut(Logger.getLogger("reader-1")))
         .onComplete(Process.eval_(Task.delay(println("signal 1 done"))))
-        .run.runAsync(_=> ())
+        .run.runAsync(_ ⇒ ())
 
-      val f: (Unit, Unit, Unit, Unit, Unit) ⇒ Unit = (a,b,c,d,e) ⇒ ()
+      val f: (Unit, Unit, Unit, Unit, Unit) ⇒ Unit = (a, b, c, d, e) ⇒ ()
 
       def writer(id: Int) = P.emitAll(0 to 10000) map { i ⇒
         signal.compareAndSet(v ⇒ Some(v.getOrElse(0) + i)).run
@@ -57,12 +57,12 @@ class SignalSpec extends Specification {
         Task.fork(writer(4).run[Task]),
         Task.fork(writer(5).run[Task])
       )(f)
-      .runAsync { _ ⇒
-        val result = signal.get.run
-        println(s"""Duration: ${System.nanoTime() - start} : $result""")
-        syncResult.put(result)
-        signal.close.run
-      }
+        .runAsync { _ ⇒
+          val result = signal.get.run
+          println(s"""Duration: ${System.nanoTime() - start} : $result""")
+          syncResult.put(result)
+          signal.close.run
+        }
 
       syncResult.get === 50005000 * 5
     }

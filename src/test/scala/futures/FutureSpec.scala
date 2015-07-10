@@ -115,4 +115,22 @@ class FutureSpec extends Specification {
       wasInterrupted === false
     }
   }
+
+  /*
+  http://quantifind.com/blog/2015/06/throttling-instantiations-of-scala-futures-1/
+  val numWorkers = sys.runtime.availableProcessors
+  val queueCapacity = 100
+  implicit val ec = ExecutionContext.fromExecutorService(
+    new ThreadPoolExecutor(
+      numWorkers, numWorkers,
+      0L, TimeUnit.SECONDS,
+      new ArrayBlockingQueue[Runnable](queueCapacity) {
+        override def offer(e: Runnable) = {
+          put(e); // may block if waiting for empty room
+          true
+        }
+      }
+    )
+  )
+  */
 }
