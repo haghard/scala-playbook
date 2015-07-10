@@ -48,17 +48,16 @@ class EventuateSpec extends Specification {
             commands.close
           })
 
-      def replicaN(numR: Int, q: Queue[String]): Process[Task, (Unit, ORSet[String])] = {
-        var vTime = VectorTime()
-        val clock = VectorClock("Order")
+      def replicaN(numR: Int, vTime: VectorTime, q: Queue[String]): Process[Task, (Unit, ORSet[String])] = {
+        var vTime0 = vTime
 
         val ADD = """add-(\w+)""".r
         val REMOVE = """remove-(\w+)""".r
 
         def update(cmd: String, order: ORSet[String]): ORSet[String] = cmd match {
           case ADD(v) ⇒
-            vTime = vTime.increase(v)
-            order.add(v, vTime)
+            vTime0 = vTime0.increase(v)
+            order.add(v, vTime0)
           case REMOVE(v) ⇒
             order.remove(v, order.versionedEntries.map(_.updateTimestamp))
         }
@@ -82,12 +81,17 @@ class EventuateSpec extends Specification {
           })
       }
 
-      replicas.enqueueOne(1).run
-      replicas.enqueueOne(2).run
+      val replicasN = List(1, 2)
+
+      val vTimes = replicasN.foldLeft(Map[String, Long]())((acc, c) ⇒ acc + (c.toString -> 0l))
+
+      replicasN.foreach {
+        replicas.enqueueOne(_).run
+      }
       replicas.close.run
 
       (opsWriter merge replicas.dequeue.map { id ⇒
-        Task.fork(replicaN(id, commands).run[Task]).runAsync(_ ⇒ ())
+        Task.fork(replicaN(id, VectorTime(vTimes), commands).run[Task]).runAsync(_ ⇒ ())
       }).runLog.run
 
       //expected Set(prodA, prodE, prodF)
