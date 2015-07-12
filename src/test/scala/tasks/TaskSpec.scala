@@ -189,8 +189,6 @@ class TaskSpec extends Specification {
 
   "Task error handling with EitherT" should {
     "run succeed" in {
-      import scalaz._
-      import Scalaz._
       import scalaz.EitherT._
 
       val flow: Task[NumberFormatException \/ Int] =
@@ -205,8 +203,6 @@ class TaskSpec extends Specification {
 
   "Task error handling with EitherT" should {
     "run failed with first error" in {
-      import scalaz._
-      import Scalaz._
       import scalaz.EitherT._
 
       val flow: Task[NumberFormatException \/ Int] =
