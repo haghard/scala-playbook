@@ -7,7 +7,7 @@ import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
 import mongo.MongoProgram.NamedThreadFactory
 import scalaz.stream.Process._
-import scalaz.{ Nondeterminism, \/-, \/ }
+import scalaz.Nondeterminism
 import scala.concurrent.SyncVar
 import scalaz.concurrent.{ Strategy, Task }
 import scalaz.stream._

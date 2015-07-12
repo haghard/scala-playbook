@@ -3,7 +3,7 @@ package streams.api
 import org.apache.log4j.Logger
 import java.util.concurrent.Executors._
 import java.util.concurrent.ExecutorService
-import scalaz.concurrent.{ Task, Strategy }
+import scalaz.concurrent.Task
 import mongo.MongoProgram.NamedThreadFactory
 import scalaz.stream.{ sink, Process, Cause, async }
 import org.reactivestreams.{ Subscription, Subscriber, Publisher }
@@ -56,7 +56,7 @@ class ScalazProcessPublisher[T] private (val source: Process[Task, T])(implicit 
 
   private def subscribe0(subscriber: Subscriber[_ >: T]): Task[Process[Task, T]] = for {
     qs ← signalQ.get
-    q = async.boundedQueue[T](32)(scalaz.concurrent.Strategy.Executor(ex))
+    q = async.boundedQueue[T](1 << 5)(scalaz.concurrent.Strategy.Executor(ex))
     updatedQs = qs + q
 
     result ← signalQ.compareAndSet {

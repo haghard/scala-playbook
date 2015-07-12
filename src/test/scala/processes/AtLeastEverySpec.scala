@@ -1,16 +1,14 @@
 package processes
 
-import java.util.concurrent.Executors._
-import java.util.concurrent.TimeoutException
-
-import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
+import java.util.concurrent.Executors._
 import org.specs2.mutable.Specification
+import mongo.MongoProgram.NamedThreadFactory
 
 import scala.concurrent.duration.Duration
-import scala.concurrent.forkjoin.{ ForkJoinPool, ThreadLocalRandom }
 import scalaz.concurrent.{ Strategy, Task }
 import scalaz.stream.{ Process, process1, time }
+import scala.concurrent.forkjoin.{ ForkJoinPool, ThreadLocalRandom }
 import scala.concurrent.duration._
 
 class AtLeastEverySpec extends Specification {
@@ -20,68 +18,42 @@ class AtLeastEverySpec extends Specification {
 
   val executor = new ForkJoinPool(2)
 
-  implicit val sch = newScheduledThreadPool(1, new NamedThreadFactory("Schedulers"))
-  val str = Strategy.Executor(newFixedThreadPool(2, new NamedThreadFactory("timeout-worker")))
+  val Scheduler = newScheduledThreadPool(1, new NamedThreadFactory("Scheduler"))
+  val I = Strategy.Executor(newScheduledThreadPool(2, new NamedThreadFactory("infrastructure")))
 
   "Process atLeastEvery" should {
-    "if we exceed latency for whole process we will throw TimeoutException/emit default" in {
-      val n = 15
-      def atLeastEvery[A](rate: Process[Task, Duration], default: A)(p: Process[Task, A]): Process[Task, A] = {
+    "if we exceed latency we will throw TimeoutException or Emit default" in {
+      val n = 30
+
+      def atLeastEvery[A](rate: Process[Task, Duration], default: A)(source: Process[Task, A]): Process[Task, A] =
         for {
-          w ← rate either p
-          r ← w.fold({ d ⇒ /*P.emit(default)*/ P.fail(new TimeoutException(default.toString)) }, { v: A ⇒ P.emit(v) })
-        } yield r
-      }
-
-      val io = (for {
-        p ← P.emitAll(1 until n)
-        i ← P.eval(Task {
-          val l = ThreadLocalRandom.current().nextInt(1, 4) * 100
-          logger.info("№" + p + " - generated latency: " + l)
-          Thread.sleep(l)
-          s"$p - $l"
-        }(executor))
-      } yield i)
-
-      val p = atLeastEvery(time.awakeEvery(2000 milli), "Timeout the whole process in  3000 mills")(io)
-      p.take(n)
-        .map { r ⇒ logger.info("result - " + r); r }
-        .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); P.halt }
-        .onComplete { P.eval(Task.delay(logger.debug(s"Process has been completed"))) }
-        .run.run
-      true should be equalTo true
-    }
-  }
-
-  "Process atLeastEvery" should {
-    "if we exceed latency we will throw TimeoutException/emit default" in {
-      val n = 10
-      def atLeastEvery[A](rate: Process[Task, Duration], default: A)(p: Process[Task, A]): Process[Task, A] =
-        for {
-          w ← (rate either p) |> process1.sliding(2)
-          r ← if (w.forall(_.isLeft)) P.emit(default) //P.fail(new TimeoutException(default.toString))
-          else P.emitAll(w.headOption.toSeq.filter(_.isRight).map(_.getOrElse(default)))
-          l = logger.info(w)
+          w ← (rate either source)(I) |> process1.sliding(2)
+          r ← if (w.forall(_.isLeft)) {
+            P.emit(s"Exceed latency $default".asInstanceOf[A])
+            //P.fail(new TimeoutException(default.toString))
+          } else P.emitAll(w.headOption.toSeq.filter(_.isRight).map(_.getOrElse(default)))
         } yield (r)
 
-      val io = for {
-        p ← P.emitAll(1 until n)
+      def l() = ThreadLocalRandom.current().nextInt(3, 8) * 100
+
+      val Source = for {
+        p ← P.emitAll(Seq.range(1, n))
         i ← P.eval(Task {
-          val l = ThreadLocalRandom.current().nextInt(1, 4) * 1000
-          logger.info("№" + p + " - generated latency: " + l)
-          Thread.sleep(l)
-          s"$p - $l"
+          val latency = l()
+          Thread.sleep(latency)
+          logger.info(s"№ $p generated latency: $latency")
+          s"$p - $latency"
         }(executor))
       } yield i
 
-      val p = atLeastEvery(time.awakeEvery(2400 milli)(str, sch), "Task timeout !!!")(io)
+      val p = atLeastEvery(time.awakeEvery(500 milli)(I, Scheduler), "Task timeout !!!")(Source)
       p.take(n)
-        .map { r ⇒ logger.info("result - " + r); r }
+        .map { r ⇒ logger.info(s"result - $r"); r }
         .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); P.halt }
         .onComplete { P.eval(Task.delay(logger.debug(s"Process has been completed"))) }
         .run.run
 
-      true should be equalTo true
+      1 === 1
     }
   }
 }
