@@ -22,7 +22,7 @@ class BankingSpec extends Specification {
   def openA() =
     for {
       _ ← open("3445684569463567", "Alan Turing", None, None, Checking)
-      _ ← open("3463568456374573", "Nickola Tesla", BigDecimal(456.9).some, None, Savings)
+      _ ← open("3463568456374573", "Nikola Tesla", BigDecimal(456.9).some, None, Savings)
     } yield ()
 
   def creditA() =
