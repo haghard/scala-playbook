@@ -1,17 +1,24 @@
 package banking.service
 
 import banking._
-import banking.repository.AccountRepository
+import banking.repository.AccountRepo
 
-import scalaz.Kleisli
+import scalaz._
 import scalaz.concurrent.Task
+import scalaz.stream.Process
 
 trait ReportingService[Amount] {
-  type ReportOperation[A] = Kleisli[Valid, AccountRepository, A]
+  type ReportOperation[A] = Kleisli[Valid, AccountRepo, A]
 
   /**
    *
    * @return
    */
   def balances: ReportOperation[Seq[(String, Amount)]]
+
+  /**
+   *
+   * @return
+   */
+  def balancesP: Reader[AccountRepo, Process[Task, Valid[Seq[(String, Amount)]]]]
 }

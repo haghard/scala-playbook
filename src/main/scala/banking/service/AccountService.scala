@@ -2,7 +2,7 @@ package banking
 package service
 
 import banking.account.AccountType
-import banking.repository.AccountRepository
+import banking.repository.AccountRepo
 
 import scalaz._
 import Scalaz._
@@ -10,7 +10,7 @@ import java.util.Date
 import scalaz.{ Bind, Kleisli }
 
 trait AccountService[Account, Amount, Balance] {
-  type AccountOperation[A] = Kleisli[Valid, AccountRepository, A]
+  type AccountOperation[A] = Kleisli[Valid, AccountRepo, A]
 
   implicit val B = new Bind[Valid] {
     override def bind[A, B](fa: Valid[A])(f: (A) ⇒ Valid[B]): Valid[B] =

@@ -2,7 +2,7 @@ package banking
 
 import java.util.Date
 
-import banking.repository.AccountRepository
+import banking.repository.AccountRepo
 import org.specs2.mutable.Specification
 import scalaz._
 import Scalaz._
@@ -33,7 +33,7 @@ class BankingSpec extends Specification {
       _ ← credit("3463568456374573", 6000)
     } yield ()
 
-  trait AccountRepositoryInMemory extends AccountRepository {
+  trait AccountRepositoryInMemory extends AccountRepo {
     lazy val repo = scala.collection.mutable.Map.empty[String, Account]
 
     override def query(no: String): ValidationNel[String, Option[Account]] =

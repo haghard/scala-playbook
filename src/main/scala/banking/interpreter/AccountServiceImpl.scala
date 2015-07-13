@@ -1,7 +1,7 @@
 package banking.interpreter
 
 import banking.account.Account
-import banking.repository.AccountRepository
+import banking.repository.AccountRepo
 
 import scalaz._
 import Scalaz._
@@ -30,7 +30,7 @@ trait AccountServiceImpl extends AccountService[Account, Amount, Balance] {
    */
   override def open(no: String, name: String, rate: Option[BigDecimal],
                     openingDate: Option[Date], accountType: AccountType): AccountOperation[Account] =
-    kleisli[Valid, AccountRepository, Account] { (repo: AccountRepository) ⇒
+    kleisli[Valid, AccountRepo, Account] { (repo: AccountRepo) ⇒
       repo.query(no).fold(
         { error ⇒ error.toString().failureNel[Account] }, { account: Option[Account] ⇒
           account.fold(accountType match {
@@ -68,7 +68,7 @@ trait AccountServiceImpl extends AccountService[Account, Amount, Balance] {
    * @return AccountOperation[Account]
    */
   private def modify(no: String, amount: Amount, dc: DC): AccountOperation[Account] =
-    kleisli[Valid, AccountRepository, Account] { (repo: AccountRepository) ⇒
+    kleisli[Valid, AccountRepo, Account] { (repo: AccountRepo) ⇒
       repo.query(no).fold(
         { error ⇒ error.toString().failureNel[Account] }, { a: Option[Account] ⇒
           a.fold(s"Account $no does not exist".failureNel[Account]) { a ⇒
@@ -86,7 +86,7 @@ trait AccountServiceImpl extends AccountService[Account, Amount, Balance] {
    * @return AccountOperation[Balance]
    */
   override def balance(no: String): AccountOperation[Balance] =
-    kleisli[Valid, AccountRepository, Balance] { (repo: AccountRepository) ⇒ repo.balance(no) }
+    kleisli[Valid, AccountRepo, Balance] { (repo: AccountRepo) ⇒ repo.balance(no) }
 
   /**
    *
@@ -95,7 +95,7 @@ trait AccountServiceImpl extends AccountService[Account, Amount, Balance] {
    * @return  AccountOperation[Account]
    */
   override def close(no: String, closeDate: Option[Date]): AccountOperation[Account] =
-    kleisli[Valid, AccountRepository, Account] { (repo: AccountRepository) ⇒
+    kleisli[Valid, AccountRepo, Account] { (repo: AccountRepo) ⇒
       repo.query(no).fold(
         { error ⇒ error.toString().failureNel[Account] }, { a: Option[Account] ⇒
           a.fold(s"Account $no does not exist".failureNel[Account]) { a ⇒

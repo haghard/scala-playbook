@@ -8,7 +8,7 @@ import banking.account._
 import scalaz._
 import Scalaz._
 
-trait AccountRepository {
+trait AccountRepo {
   /**
    *
    * @param no
