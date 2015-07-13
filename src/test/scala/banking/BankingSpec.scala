@@ -2,6 +2,7 @@ package banking
 
 import java.util.Date
 
+import banking.repository.AccountRepository
 import org.specs2.mutable.Specification
 import scalaz._
 import Scalaz._
@@ -10,8 +11,9 @@ import Kleisli._
 class BankingSpec extends Specification {
 
   import banking.account._
-  import AccountService._
-  import ReportingService._
+
+  import banking.interpreter.AccountService._
+  import banking.interpreter.ReportingService._
 
   def transaction(a: Account, cr: Amount, db: Amount) =
     for {
@@ -32,8 +34,7 @@ class BankingSpec extends Specification {
     } yield ()
 
   trait AccountRepositoryInMemory extends AccountRepository {
-    import scala.collection.mutable.Map
-    lazy val repo = Map.empty[String, Account]
+    lazy val repo = scala.collection.mutable.Map.empty[String, Account]
 
     override def query(no: String): ValidationNel[String, Option[Account]] =
       repo.get(no).success
@@ -62,7 +63,7 @@ class BankingSpec extends Specification {
         //_ ← balances
         _ ← transfer("3463568456374573", "3445684569463567", BigDecimal(1000))
         c ← balances
-      } yield (c)
+      } yield c
 
       val r = program(AccountRepositoryFromMap).disjunction
 

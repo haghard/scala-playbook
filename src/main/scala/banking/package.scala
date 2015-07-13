@@ -7,19 +7,20 @@ package object banking {
 
   import scalaz._
   import Scalaz._
-  import Kleisli._
   import java.util.Calendar
   import java.util.Date
 
   type Amount = BigDecimal
 
-  sealed trait AccountType
-  case object Checking extends AccountType
-  case object Savings extends AccountType
-
   case class Balance(amount: Amount = 0)
 
+  type Valid[A] = ValidationNel[String, A]
+
   object account {
+
+    sealed trait AccountType
+    case object Checking extends AccountType
+    case object Savings extends AccountType
 
     def today = Calendar.getInstance.getTime
 
@@ -32,6 +33,7 @@ package object banking {
     final case class SavingsAccount(no: String, name: String, rateOfInterest: Amount,
                                     dateOfOpen: Option[Date], dateOfClose: Option[Date] = None,
                                     balance: Balance = Balance()) extends Account
+
     sealed trait Account {
       def no: String
 
@@ -110,207 +112,5 @@ package object banking {
         case _                                ⇒ None
       }
     }
-
   }
-
-  import account._
-
-  trait AccountRepository {
-    /**
-     *
-     * @param no
-     * @return
-     */
-    def query(no: String): ValidationNel[String, Option[Account]]
-
-    /**
-     *
-     * @param a
-     * @return
-     */
-    def store(a: Account): ValidationNel[String, Account]
-
-    /**
-     *
-     * @param no
-     * @return
-     */
-    def balance(no: String): ValidationNel[String, Balance] =
-      query(no).fold(
-        { error ⇒ s"No account exists with no $no".failureNel[Balance] },
-        { a: Option[Account] ⇒
-          a.fold("No account exists with no $no".failureNel[Balance]) { r ⇒
-            r.balance.success
-          }
-        })
-
-    /**
-     *
-     * @param openedOn
-     * @return
-     */
-    def query(openedOn: Date): ValidationNel[String, Seq[Account]]
-
-    /**
-     *
-     * @return
-     */
-    def all: ValidationNel[String, Seq[Account]]
-  }
-
-  type Valid[A] = ValidationNel[String, A]
-
-  trait AccountService[Account, Amount, Balance] {
-    type AccountOperation[A] = Kleisli[Valid, AccountRepository, A]
-
-    implicit val B = new Bind[Valid] {
-      override def bind[A, B](fa: Valid[A])(f: (A) ⇒ Valid[B]): Valid[B] =
-        fa.fold({ error ⇒ error.toString().failureNel }, { res ⇒ f(res) })
-      override def map[A, B](fa: Valid[A])(f: (A) ⇒ B): Valid[B] =
-        fa.fold({ error ⇒ error.toString().failureNel }, { res ⇒ f(res).success })
-    }
-
-    def open(no: String, name: String, rate: Option[BigDecimal],
-             openingDate: Option[Date], accountType: AccountType): AccountOperation[Account]
-
-    def close(no: String, closeDate: Option[Date]): AccountOperation[Account]
-
-    def debit(no: String, amount: Amount): AccountOperation[Account]
-
-    def credit(no: String, amount: Amount): AccountOperation[Account]
-
-    def balance(no: String): AccountOperation[Balance]
-
-    def transfer(from: String, to: String, amount: Amount): AccountOperation[(Account, Account)] =
-      for {
-        a ← debit(from, amount)
-        b ← credit(to, amount)
-      } yield ((a, b))
-  }
-
-  trait AccountServiceInterpreter extends AccountService[Account, Amount, Balance] {
-
-    private trait DC
-
-    private case object D extends DC
-
-    private case object C extends DC
-
-    /**
-     *
-     * @param no
-     * @param name
-     * @param rate
-     * @param openingDate
-     * @param accountType
-     * @return AccountOperation[Account]
-     */
-    override def open(no: String, name: String, rate: Option[BigDecimal],
-                      openingDate: Option[Date], accountType: AccountType): AccountOperation[Account] =
-      kleisli[Valid, AccountRepository, Account] { (repo: AccountRepository) ⇒
-        repo.query(no).fold(
-          { error ⇒ error.toString().failureNel[Account] },
-          { account: Option[Account] ⇒
-            account.fold(accountType match {
-              case Checking ⇒ Account.checkingAccount(no, name, openingDate, None, Balance()).flatMap(repo.store)
-              case Savings ⇒ rate map { r ⇒
-                Account.savingsAccount(no, name, r, openingDate, None, Balance()).flatMap(repo.store)
-              } getOrElse (s"Rate needs to be given for savings account".failureNel[Account])
-            }) { r ⇒
-              s"Already existing account with no $no".failureNel[Account]
-            }
-          })
-      }
-
-    /**
-     *
-     * @param no
-     * @param amount
-     * @return
-     */
-    override def debit(no: String, amount: Amount): AccountOperation[Account] = modify(no, amount, D)
-
-    /**
-     *
-     * @param no
-     * @param amount
-     * @return
-     */
-    override def credit(no: String, amount: Amount): AccountOperation[Account] = modify(no, amount, C)
-
-    /**
-     *
-     * @param no
-     * @param amount
-     * @param dc
-     * @return AccountOperation[Account]
-     */
-    private def modify(no: String, amount: Amount, dc: DC): AccountOperation[Account] =
-      kleisli[Valid, AccountRepository, Account] { (repo: AccountRepository) ⇒
-        repo.query(no).fold(
-          { error ⇒ error.toString().failureNel[Account] },
-          { a: Option[Account] ⇒
-            a.fold(s"Account $no does not exist".failureNel[Account]) { a ⇒
-              dc match {
-                case D ⇒ Account.updateBalance(a, -amount).flatMap(repo.store)
-                case C ⇒ Account.updateBalance(a, amount).flatMap(repo.store)
-              }
-            }
-          })
-      }
-
-    /**
-     *
-     * @param no
-     * @return AccountOperation[Balance]
-     */
-    override def balance(no: String): AccountOperation[Balance] =
-      kleisli[Valid, AccountRepository, Balance] { (repo: AccountRepository) ⇒ repo.balance(no) }
-
-    /**
-     *
-     * @param no
-     * @param closeDate
-     * @return  AccountOperation[Account]
-     */
-    override def close(no: String, closeDate: Option[Date]): AccountOperation[Account] =
-      kleisli[Valid, AccountRepository, Account] { (repo: AccountRepository) ⇒
-        repo.query(no).fold(
-          { error: NonEmptyList[String] ⇒ error.toString().failureNel[Account] },
-          { a: Option[Account] ⇒
-            a.fold(s"Account $no does not exist".failureNel[Account]) { a ⇒
-              val cd = closeDate.getOrElse(today)
-              Account.close(a, cd).flatMap(repo.store)
-            }
-          })
-      }
-  }
-
-  /**
-   *
-   * @tparam Amount
-   */
-  trait ReportingService[Amount] {
-    type ReportOperation[A] = Kleisli[Valid, AccountRepository, A]
-
-    /**
-     *
-     * @return
-     */
-    def balances: ReportOperation[Seq[(String, Amount)]]
-  }
-
-  trait ReportingServiceInterpreter extends ReportingService[Amount] {
-    override def balances: ReportOperation[Seq[(String, Amount)]] =
-      kleisli[Valid, AccountRepository, Seq[(String, Amount)]] { (repo: AccountRepository) ⇒
-        repo.all.fold(
-          { error ⇒ error.toString().failureNel
-          }, { as: Seq[Account] ⇒
-            as.map(a ⇒ (a.no, a.balance.amount)).success
-          })
-      }
-  }
-
-  object AccountService extends AccountServiceInterpreter
-  object ReportingService extends ReportingServiceInterpreter
 }

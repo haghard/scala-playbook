@@ -15,7 +15,7 @@ import scalaz._
 import Scalaz._
 
 class BTreeStructuralRecursionSpec extends Specification {
-  import tree.{ node, invert, foldLeft, foldMap, foldMapPar }
+  import tree.{ node, invert, foldLeft, foldMap, foldMapPar, depth }
 
   implicit val M = scalaz.Monoid[Int]
 
@@ -97,6 +97,37 @@ class BTreeStructuralRecursionSpec extends Specification {
     }
   }
 
+  "Btree" should {
+    "depth" in {
+
+      var t = node(5)
+      t = t :+ 4
+      t = t :+ 10
+      t = t :+ 11
+      t = t :+ 3
+      t = t :+ 9
+      t = t :+ 15
+
+      depth(t) === 4
+    }
+  }
+
+  "Btree" should {
+    "maximum" in {
+      var t = node(5)
+      t = t :+ 4
+      t = t :+ 10
+      t = t :+ 11
+      t = t :+ 3
+      t = t :+ 9
+      t = t :+ 15
+
+      val m = t.maximum
+      m === 15
+
+    }
+  }
+
   sealed trait Tree[+T]
 
   case object Leaf extends Tree[Nothing]
@@ -115,13 +146,15 @@ class BTreeStructuralRecursionSpec extends Specification {
       case Node(v, l, r) ⇒ f(foldLoop(l, z)(f), v, foldLoop(r, z)(f))
     }
 
-    def size[T](tree: Tree[T]) = foldLoop(tree, 0: Int) { (l, x, r) ⇒ l + r + 1 }
-
     def map[A, B](tree: Tree[A])(f: A ⇒ B): Tree[B] =
       foldLoop(tree, nil[B]) { (left, value, right) ⇒ Node(f(value), left, right) }
 
     def invert[A](tree: Tree[A]): Tree[A] =
       foldLoop(tree, nil[A]) { (left, value, right) ⇒ Node(value, right, left) }
+
+    def size[T](tree: Tree[T]): Int = foldLoop(tree, 0: Int) { (l, x, r) ⇒ l + r + 1 }
+
+    def depth[A](tree: Tree[A]): Int = foldLoop(tree, 1: Int) { (l, v, r) ⇒ 1 + l max r }
 
     override def foldLeft[T, A](as: Tree[T])(z: A)(f: (A, T) ⇒ A): A = as match {
       case Leaf ⇒ z
@@ -181,6 +214,18 @@ class BTreeStructuralRecursionSpec extends Specification {
   }
 
   implicit class TreeSyntax[T](self: Tree[T])(implicit ord: scala.math.Ordering[T]) {
+
+    private def maximum0(v: T, t: Tree[T]): T = t match {
+      case Leaf ⇒ v
+      case Node(v, left, right) ⇒
+        val maxL = maximum0(v, left)
+        val maxR = maximum0(v, right)
+        if (ord.lt(maxL, maxR)) maxR else maxL
+    }
+
+    def maximum: T =
+      maximum0(null.asInstanceOf[T], self)
+
     @tailrec private def scan(searched: T, t: Tree[T]): Option[T] = t match {
       case Leaf                                  ⇒ None
       case Node(v, left, right) if searched == v ⇒ Option(v)
@@ -208,5 +253,6 @@ class BTreeStructuralRecursionSpec extends Specification {
           Node(a, left, right :+ inserted)
       }
     }
+
   }
 }
