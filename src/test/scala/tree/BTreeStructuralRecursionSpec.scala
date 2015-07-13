@@ -124,7 +124,6 @@ class BTreeStructuralRecursionSpec extends Specification {
 
       val m = t.maximum
       m === 15
-
     }
   }
 
@@ -218,13 +217,12 @@ class BTreeStructuralRecursionSpec extends Specification {
     private def maximum0(v: T, t: Tree[T]): T = t match {
       case Leaf ⇒ v
       case Node(v, left, right) ⇒
-        val maxL = maximum0(v, left)
-        val maxR = maximum0(v, right)
-        if (ord.lt(maxL, maxR)) maxR else maxL
+        val left = maximum0(v, left)
+        val right = maximum0(v, right)
+        if (ord.lt(left, right)) right else left
     }
 
-    def maximum: T =
-      maximum0(null.asInstanceOf[T], self)
+    def maximum: T = maximum0(null.asInstanceOf[T], self)
 
     @tailrec private def scan(searched: T, t: Tree[T]): Option[T] = t match {
       case Leaf                                  ⇒ None

@@ -50,8 +50,8 @@ class TreeSpec extends Specification {
         }
 
       val b = Branch(
-        Branch(Leaf(1), Branch(Leaf(2), Leaf(3))),
-        Branch(Leaf(4), Branch(Leaf(5), Branch(Leaf(6), Leaf(7)))))
+        Branch(leaf(1), Branch(leaf(2), leaf(3))),
+        Branch(leaf(4), Branch(leaf(5), Branch(leaf(6), leaf(7)))))
 
       foldMapPar(b)(m).run should be equalTo 28
     }
@@ -65,6 +65,8 @@ case class Branch[T](left: Tree[T], right: Tree[T]) extends Tree[T]
 object TreeF extends Foldable0[Tree] {
   private val logger = Logger.getLogger("tree")
   implicit val S = Executors.newFixedThreadPool(2, new NamedThreadFactory("tree-folder"))
+
+  def leaf[T](value: T) = Leaf[T](value)
 
   override def foldMap[A, B](as: Tree[A])(f: A ⇒ B)(implicit mb: Monoid[B]): B =
     as match {
