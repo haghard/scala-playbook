@@ -157,10 +157,6 @@ class BTreeStructuralRecursionSpec extends Specification {
 
     override def foldLeft[T, A](as: Tree[T])(z: A)(f: (A, T) ⇒ A): A = as match {
       case Leaf ⇒ z
-      case Node(v, Leaf, Leaf) ⇒
-        val acc = f(z, v)
-        println(s"$v - $acc")
-        acc
       case Node(v, l, r) ⇒
         val acc = f(z, v)
         println(s"$v - $acc")
@@ -169,10 +165,6 @@ class BTreeStructuralRecursionSpec extends Specification {
 
     override def foldRight[T, A](as: Tree[T])(z: A)(f: (T, A) ⇒ A): A = as match {
       case Leaf ⇒ z
-      case Node(v, Leaf, Leaf) ⇒
-        val acc = f(v, z)
-        println(s"$v - $acc")
-        acc
       case Node(v, l, r) ⇒
         val acc = f(v, z)
         println(s"$v - $acc")
@@ -213,17 +205,6 @@ class BTreeStructuralRecursionSpec extends Specification {
   }
 
   implicit class TreeSyntax[T](self: Tree[T])(implicit ord: scala.math.Ordering[T]) {
-
-    private def maximum0(v: T, t: Tree[T]): T = t match {
-      case Leaf ⇒ v
-      case Node(v, left, right) ⇒
-        val left = maximum0(v, left)
-        val right = maximum0(v, right)
-        if (ord.lt(left, right)) right else left
-    }
-
-    def maximum: T = maximum0(null.asInstanceOf[T], self)
-
     @tailrec private def scan(searched: T, t: Tree[T]): Option[T] = t match {
       case Leaf                                  ⇒ None
       case Node(v, left, right) if searched == v ⇒ Option(v)
@@ -236,6 +217,16 @@ class BTreeStructuralRecursionSpec extends Specification {
           scan(searched, right)
         }
     }
+
+    private def maximum0(v: T, t: Tree[T]): T = t match {
+      case Leaf ⇒ v
+      case Node(v, left, right) ⇒
+        val l = maximum0(v, left)
+        val r = maximum0(v, right)
+        if (ord.lt(l, r)) r else l
+    }
+
+    def maximum: T = maximum0(null.asInstanceOf[T], self)
 
     def search(searched: T): Option[T] =
       scan(searched, self)
@@ -251,6 +242,5 @@ class BTreeStructuralRecursionSpec extends Specification {
           Node(a, left, right :+ inserted)
       }
     }
-
   }
 }
