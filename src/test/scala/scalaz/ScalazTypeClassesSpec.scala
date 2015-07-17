@@ -68,9 +68,9 @@ class ScalazTypeClassesSpec extends Specification {
       List("abcd", "efghi").foldMap(_.length) should be equalTo 9
     }
 
-    "semigroup pos" in {
+    "Semigroup ops" in {
       1 |+| 2 |+| 6 should be equalTo 9
-      "Hello".some |+| None |+| "world".some should be equalTo Some("Helloworld")
+      "Hello".some |+| None |+| "World".some should be equalTo "HelloWorld".some
     }
   }
 
