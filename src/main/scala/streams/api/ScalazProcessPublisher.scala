@@ -41,25 +41,24 @@ trait WritablePublisher[T] extends Publisher[T] {
 class ScalazProcessPublisher[T] private (val source: Process[Task, T])(implicit ex: ExecutorService) extends WritablePublisher[T] {
   private val P = Process
   private val logger = Logger.getLogger("publisher")
-
   private val executor = newFixedThreadPool(4, new NamedThreadFactory("publisher-infrastructure"))
   private val Strategy = scalaz.concurrent.Strategy.Executor(executor)
-  private val signalQ = async.signalOf(Set[async.mutable.Queue[T]]())(Strategy)
-  private val subscriptions = async.boundedQueue[Subscriber[_ >: T]](10)(Strategy)
+  private val subscriptions = async.signalOf(Set[async.mutable.Queue[T]]())(Strategy)
+  private val subRequests = async.boundedQueue[Subscriber[_ >: T]](10)(Strategy)
 
-  def publish(a: T): Task[Unit] = for {
-    qsList ← signalQ.discrete.filter(s ⇒ s.nonEmpty).take(1).runLog
+  private def publish(a: T): Task[Unit] = for {
+    qsList ← subscriptions.discrete.filter(s ⇒ s.nonEmpty).take(1).runLog
     qs = qsList.flatMap { _.toList }
 
     _ ← Task.gatherUnordered(qs.toList.map { q ⇒ q.enqueueOne(a) })
   } yield ()
 
   private def subscribe0(subscriber: Subscriber[_ >: T]): Task[Process[Task, T]] = for {
-    qs ← signalQ.get
+    qs ← subscriptions.get
     q = async.boundedQueue[T](1 << 5)(scalaz.concurrent.Strategy.Executor(ex))
     updatedQs = qs + q
 
-    result ← signalQ.compareAndSet {
+    result ← subscriptions.compareAndSet {
       case Some(`qs`) ⇒ Some(updatedQs)
       case opt        ⇒ opt
     }
@@ -71,10 +70,10 @@ class ScalazProcessPublisher[T] private (val source: Process[Task, T])(implicit 
   } yield back
 
   private def unsubscribe(q: async.mutable.Queue[T]): Task[Unit] = for {
-    qs ← signalQ.get
+    qs ← subscriptions.get
     updatedQs = qs - q
 
-    result ← signalQ compareAndSet {
+    result ← subscriptions compareAndSet {
       case Some(`qs`) ⇒ Some(updatedQs)
       case opt        ⇒ opt
     }
@@ -88,7 +87,7 @@ class ScalazProcessPublisher[T] private (val source: Process[Task, T])(implicit 
   private val finalizer: Process[Task, Unit] =
     P.eval(
       for {
-        qsList ← signalQ.discrete.take(1).runLog
+        qsList ← subscriptions.discrete.take(1).runLog
         qs = qsList.flatMap { _.toList }
         _ = logger.info(s"writer done for qs: ${qs.size}")
         _ ← Task.gatherUnordered(qs.map { _.close })
@@ -97,7 +96,7 @@ class ScalazProcessPublisher[T] private (val source: Process[Task, T])(implicit 
 
   private val writer = (source to sink.lift(publish)).drain.onComplete(finalizer)
 
-  override val flow = writer.merge(subscriptions.dequeue.map { s ⇒
+  override val flow = writer.merge(subRequests.dequeue.map { s ⇒
     if (s eq null) s.onError(new NullPointerException("Null subscriber"))
     val subscription = secret(s, subscribe0(s).run)
     s.onSubscribe(subscription)
@@ -106,32 +105,32 @@ class ScalazProcessPublisher[T] private (val source: Process[Task, T])(implicit 
   flow.run.runAsync(_ ⇒ ())
 
   override def subscribe(subscriber: Subscriber[_ >: T]): Unit = {
-    Task.fork(subscriptions.enqueueOne(subscriber))(executor)
+    Task.fork(subRequests.enqueueOne(subscriber))(executor)
       .runAsync(_ ⇒ ())
   }
 
   private def secret(s: Subscriber[_ >: T], p: Process[Task, T]) = new Subscription {
     private lazy val CSource = streams.io.chunkR(p)
-    private val signalR = async.signalOf(-1)(scalaz.concurrent.Strategy.Executor(ex))
+    private val requests = async.signalOf(-1)(scalaz.concurrent.Strategy.Executor(ex))
 
     private val gracefulHalter: Cause ⇒ Process[Task, Unit] = {
       case cause @ Cause.End ⇒
         s.onComplete()
-        signalR.close.run
+        requests.close.run
         Process.Halt(cause)
       case cause @ Cause.Kill ⇒
         s.onComplete()
-        signalR.close.run
+        requests.close.run
         Process.Halt(cause)
       case cause @ Cause.Error(_) ⇒
         if (cause.rsn.getMessage == streams.io.exitMessage) s.onComplete()
         else s.onError(cause.rsn)
-        signalR.close.run
+        requests.close.run
         Process.halt
     }
 
     (for {
-      size ← signalR.discrete.filter(_ > -1)
+      size ← requests.discrete.filter(_ > -1)
       _ ← (CSource chunk size) map { seq ⇒
         seq foreach { i ⇒
           s.onNext(i)
@@ -147,18 +146,15 @@ class ScalazProcessPublisher[T] private (val source: Process[Task, T])(implicit 
       .run[Task]
       .runAsync(_ ⇒ logger.info(s"Subscriber $s is gone"))
 
-    override def cancel(): Unit = {
-      signalR.close.runAsync(_ ⇒ ())
-    }
+    override def cancel(): Unit =
+      requests.close.runAsync(_ ⇒ ())
 
     override def request(n: Long): Unit = {
-      if (n < 1) {
+      if (n < 1)
         s.onError(new IllegalArgumentException(
           "Violate the Reactive Streams rule 3.9 by requesting a non-positive number of elements."))
-      }
-      Task.fork {
-        signalR.set(n.toInt)
-      }(ex).runAsync(_ ⇒ logger.info(s"request $n"))
+
+      Task.fork(requests.set(n.toInt))(ex).runAsync(_ ⇒ logger.info(s"request $n"))
     }
   }
 }

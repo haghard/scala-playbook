@@ -183,28 +183,11 @@ class TaskSpec extends FlatSpec with org.scalatest.Matchers {
     flow.run should ===(\/-(3))
   }
 
-  "Task error handling with EitherT failed" should "run" in {
-    import scalaz.EitherT._
-
-    val flow: Task[NumberFormatException \/ Int] =
-      (for {
-        a ← serviceR("a") |> eitherT
-        b ← serviceR("b") |> eitherT
-      } yield (a + b)).run
-
-    val r = flow.run
-    logger.info(r)
-    //new NumberFormatException("For input string: "a""))
-    r.isLeft shouldEqual true
-
-  }
-
   trait Op[A] {
     def sum(f: A, s: A): A
   }
 
   object Op {
-
     implicit object StrCont extends Op[String] {
       override def sum(f: String, s: String): String = (f.toInt + s.toInt).toString
     }
@@ -220,7 +203,6 @@ class TaskSpec extends FlatSpec with org.scalatest.Matchers {
         f + s
       }
     }
-
   }
 
   def sReader[T: Op] = scalaz.Reader { (left: T) ⇒
