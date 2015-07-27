@@ -41,6 +41,7 @@ resolvers += "RichRelevance Bintray" at "http://dl.bintray.com/rr/releases"
 
 resolvers += "octalmind"             at "https://dl.bintray.com/guillaumebreton/maven"
 
+resolvers += "patriknw at bintray" at "http://dl.bintray.com/patriknw/maven"
 
 //"org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5.2" exclude ("org.specs2", "*"),
 libraryDependencies ++= Seq(
@@ -58,6 +59,7 @@ libraryDependencies ++= Seq(
     "com.twitter"         %% "util-core"           % "6.23.0",
     "com.google.guava"    %  "guava"               % "18.0",
     "com.rbmhtechnology"  %% "eventuate"           % "0.2.1",
+    "com.github.patriknw" %% "akka-data-replication" % "0.11",
     "org.scala-stm"       %% "scala-stm"           % "0.7"
 )
 
