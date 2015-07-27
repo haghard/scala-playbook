@@ -12,9 +12,9 @@ import scalaz.stream.async.mutable.{ Signal, Queue }
 
 object Replication {
 
-  val Size = 10
+  val Size = 20
   val P = scalaz.stream.Process
-  val replicasN = Set(1, 2, 3)
+  val replicasN = Set(1, 2, 3, 4)
 
   //optimal size is equal to the number of replica
   val R = Strategy.Executor(newFixedThreadPool(Runtime.getRuntime.availableProcessors() / 2,

@@ -24,14 +24,14 @@ object Replicas {
     }
 
     override def elements(set: com.rbmhtechnology.eventuate.crdt.ORSet[String]): Set[String] = {
-      LoggerE.info("History:" + localTime)
+      LoggerE.info(s"History: $localTime")
       set.value
     }
   }
 
   implicit def akkaReplica() = new Replica[akka.contrib.datareplication.ORSet, String] {
-    private val Logger4j = Logger.getLogger("akka-replica")
-    lazy val node = UniqueAddress(
+    private val LoggerAkka = Logger.getLogger("akka-replica")
+    private lazy val node = UniqueAddress(
       Address("akka.tcp", "System", "localhost", 5000 + num), num)
 
     @volatile private var localTime =
@@ -42,19 +42,19 @@ object Replicas {
         case ADD(v) ⇒
           val vc = s.add(node, v)
           localTime = vc.vclock
-          Logger4j.info(s"Add $v\n ON $node\n $localTime\n")
+          LoggerAkka.info(s"Add $v\n ON $node\n $localTime\n")
           vc
 
         case DROP(v) ⇒
           val vc = s.remove(node, v)
           localTime = vc.vclock
-          Logger4j.info(s"Drop $v\n ON $node\n  $localTime\n")
+          LoggerAkka.info(s"Drop $v\n ON $node\n  $localTime\n")
           vc
       }
     }
 
     override def elements(set: ORSet[String]): Set[String] = {
-      Logger4j.info("History:" + localTime)
+      LoggerAkka.info(s"History: $localTime")
       set.elements
     }
   }

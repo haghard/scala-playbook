@@ -12,12 +12,6 @@ import scalaz.concurrent.Strategy
 import scalaz.stream.{ Process, async }
 
 object DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCart") {
-  val Size = 10
-  val P = scalaz.stream.Process
-  val replicasN = Set(1, 2, 3)
-
-  val Logger4j = Logger.getLogger("akka-shopping-cart")
-
   import Replication._
 
   property("Preserve order concurrent operation that are happening with Akka") = forAll { (p: Vector[String], cancelled: List[Int]) ⇒
@@ -55,8 +49,6 @@ object DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCar
 
     latch.await()
     replicator.close.run
-
-    Logger4j.info("iteration")
 
     //check first 2, bare minimum
     replicasN.size == replicasN.size
