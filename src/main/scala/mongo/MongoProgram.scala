@@ -64,13 +64,13 @@ object MongoProgram {
     val addr = server.bind
     val core = program[T](dbName, addr, ops)
     f(core)
-    server.shutdownNow
+    server.shutdownNow()
   }
 
   final class NamedThreadFactory(var name: String) extends ThreadFactory {
     private def namePrefix = name + "-thread"
     private val threadNumber = new AtomicInteger(1)
-    private val group: ThreadGroup = Thread.currentThread().getThreadGroup()
+    private val group: ThreadGroup = Thread.currentThread().getThreadGroup
 
     override def newThread(r: Runnable) = new Thread(this.group, r,
       s"$namePrefix-${threadNumber.getAndIncrement()}", 0L)

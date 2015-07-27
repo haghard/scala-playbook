@@ -44,11 +44,12 @@ object EventuateShoppingCartSpec extends Properties("ShoppingCart") {
   implicit def BuyArbitrary: org.scalacheck.Arbitrary[Vector[String]] =
     Arbitrary(genBoundedVector[String](Size, Gen.uuid.map { _.toString }))
 
-  case class Replica(numR: Int, input: Queue[String], channelR: Signal[ORSet[String]],
-                     collector: TrieMap[Int, Set[String]]) {
+  case class Replica(numR: Int, input: Queue[String], replicationChannel: Signal[ORSet[String]])
+                    (implicit collector: TrieMap[Int, Set[String]]) {
     private val ADD = """add-(.+)""".r
     private val DROP = """drop-(.+)""".r
 
+    //store all history for this replica (add and remove)
     @volatile var localTime = VectorTime()
 
     private def merge(cmd: String, order: ORSet[String]): ORSet[String] = cmd match {
@@ -60,37 +61,40 @@ object EventuateShoppingCartSpec extends Properties("ShoppingCart") {
         order.remove(v, order.versionedEntries.map(_.updateTimestamp))
     }
 
-    def start(): Task[Unit] = {
+    def start(): Task[Unit] =
       input.dequeue.flatMap { action ⇒
         //LoggerI.info(s"Replica:$numR has received cmd[$action]")
-        P.eval(channelR.compareAndSet(c ⇒ Some(merge(action, c.get))))
+        P.eval(replicationChannel.compareAndSet(c ⇒ Some(merge(action, c.get))))
         /*zip P.eval(replicator.get))
           .map(out ⇒ LoggerI.info(s"Replica:$numR Order:${out._2.value} VT:[${out._2.versionedEntries}] Local-VT:[$localTime]"))*/
-      }.onComplete(P.eval(Task.now(collector += numR -> channelR.get.run.value))).run[Task]
-    }
+      }.onComplete(P.eval(Task.now(collector += numR -> replicationChannel.get.run.value)))
+        .run[Task]
   }
 
-  property("Deterministically converge") = forAll { (p: Vector[String], cancelled: List[Int]) ⇒
-    val collector = new TrieMap[Int, Set[String]]
+  property("Preserve order concurrent operation that are happening") = forAll { (p: Vector[String], cancelled: List[Int]) ⇒
+    implicit val collector = new TrieMap[Int, Set[String]]
     val replicator = async.signalOf(ORSet[String]())(S)
     val commands = async.boundedQueue[String](Size / 2)(S)
     val replicas = async.boundedQueue[Int](Size / 2)(S)
 
-    //We need partial order for add/remove events for the same product-uuid, so we just
     val purchases = p.toSet.&~(cancelled.map(p(_)).toSet).map("product-" + _)
 
     val latch = new CountDownLatch(replicasN.size)
     replicasN.foreach { replicas.enqueueOne(_).run }
     replicas.close.run
 
-    val ops = P.emitAll(p.map("add-product-" + _) ++ cancelled.map("drop-product-" + p(_))).toSource
+    //We need partial order for add/remove events for the same product-uuid
+    //because you can't delete a product that hasn't been added
+    //So we just add cancellation in the end
+    val ops = P.emitAll(p.map("add-product-" + _) ++ cancelled.map("drop-product-" + p(_)))
+      .toSource
 
     val writer = (ops to commands.enqueue)
       .drain.onComplete(Process.eval_(commands.close))
 
     writer.merge(
       replicas.dequeue.map(
-        Replica(_, commands, replicator, collector).start()
+        Replica(_, commands, replicator).start()
           .runAsync { _ ⇒ latch.countDown() }
       )
     )(S).run.run
