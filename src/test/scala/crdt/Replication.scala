@@ -50,7 +50,7 @@ object Replication {
       } yield new String(Array(a, b, c))
     ))
 
-  trait Replica[F[_], T] {
+  trait ConvergableReplica[F[_], T] {
     protected val ADD = """add-(.+)""".r
     protected val DROP = """drop-(.+)""".r
 
@@ -58,32 +58,32 @@ object Replication {
     private var input: Queue[T] = null
     private var replicationChannel: Signal[F[T]] = null
 
-    private def create(n: Int, i: Queue[T], r: Signal[F[T]]): Replica[F, T] = {
+    private def create(n: Int, i: Queue[T], r: Signal[F[T]]): ConvergableReplica[F, T] = {
       num = n
       input = i
       replicationChannel = r
       this
     }
 
-    def merge(cmd: T, s: F[T]): F[T]
+    def converge(cmd: T, s: F[T]): F[T]
 
     protected def elements(set: F[T]): Set[T]
 
     def task(collector: TrieMap[Int, Set[T]]): Task[Unit] =
       input.dequeue.flatMap { action ⇒
-        P.eval(replicationChannel.compareAndSet(c ⇒ Some(merge(action, c.get))))
+        P.eval(replicationChannel.compareAndSet(c ⇒ Some(converge(action, c.get))))
         /*zip P.eval(replicator.get))
           .map(out ⇒ LoggerI.info(s"Replica:$numR Order:${out._2.value} VT:[${out._2.versionedEntries}] Local-VT:[$localTime]"))*/
       }.onComplete(P.eval(Task.now(collector += num -> elements(replicationChannel.get.run))))
         .run[Task]
   }
 
-  object Replica {
+  object ConvergableReplica {
 
-    def apply[F[_], T](n: Int, i: Queue[T], S: Strategy)(implicit replica: Replica[F, T], zero: F[T]): Replica[F, T] =
+    def apply[F[_], T](n: Int, i: Queue[T], S: Strategy)(implicit replica: ConvergableReplica[F, T], zero: F[T]): ConvergableReplica[F, T] =
       replica.create(n, i, async.signalOf[F[T]](zero)(S))
 
-    def apply[F[_], T](n: Int, i: Queue[T], rChannel: Signal[F[T]])(implicit replica: Replica[F, T]): Replica[F, T] =
+    def apply[F[_], T](n: Int, i: Queue[T], rChannel: Signal[F[T]])(implicit replica: ConvergableReplica[F, T]): ConvergableReplica[F, T] =
       replica.create(n, i, rChannel)
 
     implicit def eventuateR = akka.contrib.datareplication.Replicas.eventuateReplica()

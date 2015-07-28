@@ -2,17 +2,17 @@ package akka.contrib.datareplication
 
 import akka.actor.Address
 import org.apache.log4j.Logger
-import crdt.Replication.Replica
+import crdt.Replication.ConvergableReplica
 import akka.cluster.UniqueAddress
 import com.rbmhtechnology.eventuate.VectorTime
 
 object Replicas {
 
-  implicit def eventuateReplica() = new Replica[com.rbmhtechnology.eventuate.crdt.ORSet, String] {
+  implicit def eventuateReplica() = new ConvergableReplica[com.rbmhtechnology.eventuate.crdt.ORSet, String] {
     private val LoggerE = Logger.getLogger("eventuate-replica")
     @volatile private var localTime = VectorTime() //tracks all additions and grows infinitely
 
-    override def merge(cmd: String, s: com.rbmhtechnology.eventuate.crdt.ORSet[String]): com.rbmhtechnology.eventuate.crdt.ORSet[String] = cmd match {
+    override def converge(cmd: String, s: com.rbmhtechnology.eventuate.crdt.ORSet[String]): com.rbmhtechnology.eventuate.crdt.ORSet[String] = cmd match {
       case ADD(v) ⇒
         localTime = s.versionedEntries./:(localTime)(_ merge _.updateTimestamp).increase(v)
         val r = s.add(v, localTime)
@@ -32,12 +32,12 @@ object Replicas {
     }
   }
 
-  implicit def akkaReplica() = new Replica[akka.contrib.datareplication.ORSet, String] {
+  implicit def akkaReplica() = new ConvergableReplica[akka.contrib.datareplication.ORSet, String] {
     private val LoggerAkka = Logger.getLogger("akka-replica")
     private lazy val node = UniqueAddress(
       Address("akka.tcp", "Ecom-System", "localhost", 5000 + num), num)
 
-    override def merge(cmd: String, s: ORSet[String]): ORSet[String] = {
+    override def converge(cmd: String, s: ORSet[String]): ORSet[String] = {
       cmd match {
         case ADD(v) ⇒
           val vc = s.add(node, v)

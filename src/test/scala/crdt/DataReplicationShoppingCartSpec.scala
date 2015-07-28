@@ -5,7 +5,7 @@ import com.twitter.util.CountDownLatch
 import mongo.MongoProgram.NamedThreadFactory
 
 import org.scalacheck.Prop._
-import org.scalacheck.Properties
+import org.scalacheck.{ Gen, Properties }
 
 import scala.collection.concurrent.TrieMap
 import scalaz.concurrent.Strategy
@@ -14,47 +14,54 @@ import scalaz.stream.{ Process, async }
 object DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCart") {
   import Replication._
 
-  property("Akka ORSet") = forAll { (p: Vector[String], cancelled: List[Int]) ⇒
-    ShoppingCartLog.info("Wishes: " + p + " cancelled: " + cancelled)
+  property("AkkaDataReplication ORSet") = forAll(
+    Gen.containerOfN[Vector, String](Size, for {
+      a ← Gen.alphaUpperChar
+      b ← Gen.alphaLowerChar
+      c ← Gen.alphaUpperChar
+    } yield new String(Array(a, b, c))),
+    Gen.listOfN(Size, Gen.chooseNum(0, Size - 1))) { (p: Vector[String], cancelled: List[Int]) ⇒
 
-    val collector = new TrieMap[Int, Set[String]]
-    type RType[T] = akka.contrib.datareplication.ORSet[T]
+      ShoppingCartLog.info("Wishes: " + p + " cancelled: " + cancelled)
 
-    val RCore = Strategy.Executor(newFixedThreadPool(Runtime.getRuntime.availableProcessors(),
-      new NamedThreadFactory("r-core")))
+      val collector = new TrieMap[Int, Set[String]]
+      type RType[T] = akka.contrib.datareplication.ORSet[T]
 
-    val input = async.boundedQueue[String](Size)(R)
-    val replicas = async.boundedQueue[Int](Size)(R)
+      val RCore = Strategy.Executor(newFixedThreadPool(Runtime.getRuntime.availableProcessors(),
+        new NamedThreadFactory("r-core")))
 
-    val purchases = p.toSet.&~(cancelled.map(p(_)).toSet).map("product-" + _)
-    ShoppingCartLog.info("purchases: " + purchases)
+      val input = async.boundedQueue[String](Size)(R)
+      val replicas = async.boundedQueue[Int](Size)(R)
 
-    val latch = new CountDownLatch(replicasN.size)
-    replicasN.foreach { replicas.enqueueOne(_).run }
-    replicas.close.run
+      val purchases = p.toSet.&~(cancelled.map(p(_)).toSet).map("product-" + _)
+      ShoppingCartLog.info("purchases: " + purchases)
 
-    //We need partial order for add/remove events for the same product-uuid
-    //because you can't delete a product that hasn't been added
-    //So we just add cancellation in the end
-    val ops = P.emitAll(p.map("add-product-" + _) ++ cancelled.map("drop-product-" + p(_)))
-      .toSource
+      val latch = new CountDownLatch(replicasN.size)
+      replicasN.foreach { replicas.enqueueOne(_).run }
+      replicas.close.run
 
-    val Writer = (ops to input.enqueue).drain.onComplete(Process.eval_(input.close))
+      //We need partial order for add/remove events for the same product-uuid
+      //because you can't delete a product that hasn't been added
+      //So we just add cancellation in the end
+      val ops = P.emitAll(p.map("add-product-" + _) ++ cancelled.map("drop-product-" + p(_)))
+        .toSource
 
-    val replicator = replicatorChannelFor[RType, String](RCore)
+      val Writer = (ops to input.enqueue).drain.onComplete(Process.eval_(input.close))
 
-    Writer.merge(
-      replicas.dequeue.map {
-        Replica[RType, String](_, input, replicator).task(collector) //run replicas in concurrent manner
-          .runAsync { _ ⇒ latch.countDown() }
-      }
-    )(R).run.run
+      val replicator = replicatorChannelFor[RType, String](RCore)
 
-    latch.await()
-    replicator.close.run
+      Writer.merge(
+        replicas.dequeue.map {
+          ConvergableReplica[RType, String](_, input, replicator).task(collector) //run replicas in concurrent manner
+            .runAsync { _ ⇒ latch.countDown() }
+        }
+      )(R).run.run
 
-    (replicasN.size == replicasN.size) :| "Result size violation" &&
-      (collector(replicasN.head) == purchases) :| "Head violation" &&
-      (collector(replicasN.tail.head) == purchases) :| "Next violation"
-  }
+      latch.await()
+      replicator.close.run
+
+      (replicasN.size == replicasN.size) :| "Result size violation" &&
+        (collector(replicasN.head) == purchases) :| "Head violation" &&
+        (collector(replicasN.tail.head) == purchases) :| "Next violation"
+    }
 }

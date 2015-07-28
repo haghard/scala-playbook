@@ -1,12 +1,14 @@
 package processes
 
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{ TimeUnit, CountDownLatch }
 import java.util.concurrent.Executors._
 import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
+import org.scalacheck.Gen
 import org.specs2.mutable.Specification
 import scala.collection.IndexedSeq
 import scala.concurrent.SyncVar
+import scala.concurrent.duration.{ FiniteDuration, Duration }
 import scala.concurrent.forkjoin.ThreadLocalRandom
 import scalaz.stream.Process._
 import scalaz.{ \/-, -\/, \/ }
@@ -64,7 +66,7 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
     "Merges non-deterministically processes with mergeN" in {
       val range = 0 until 50
       val ioExecutor = newFixedThreadPool(4, new NamedThreadFactory("io-executor"))
-      val fanOut = Strategy.Executor(newFixedThreadPool(1, new NamedThreadFactory("fan-out")))
+      val fanOutS = Strategy.Executor(newFixedThreadPool(1, new NamedThreadFactory("fan-out")))
 
       val sum = range.sum
       val sync = new SyncVar[Throwable \/ IndexedSeq[Int]]
@@ -78,12 +80,11 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
       val source: Process[Task, Process[Task, Int]] =
         emitAll(range) |> process1.lift(resource)
 
-      merge.mergeN(0)(source)(fanOut).fold(0) { (a, b) ⇒
+      merge.mergeN(source)(fanOutS).fold(0) { (a, b) ⇒
         val r = a + b
         logger.info(s"${Thread.currentThread.getName} - current sum: $r")
         r
-      }.runLog
-        .runAsync(sync.put)
+      }.runLog.runAsync(sync.put)
 
       sync.get should be equalTo \/-(IndexedSeq(sum))
     }
@@ -172,6 +173,62 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
 
       p.onComplete(P.eval(Task.delay { logger.info("Consumer are done"); latch.countDown() })).run.runAsync(_ ⇒ ())
       latch.await
+      1 === 1
+    }
+  }
+
+  import scalaz.stream.Wye
+  def microBatch[I](duration: Duration, maxSize: Int = Int.MaxValue): Wye[Long, I, (Long, Vector[I])] = {
+    import scalaz.stream.ReceiveY.{ HaltOne, ReceiveL, ReceiveR }
+    val nanos = duration.toNanos
+
+    def go(acc: Vector[I], last: Long): Wye[Long, I, (Long, Vector[I])] =
+      P.awaitBoth[Long, I].flatMap {
+        case ReceiveL(current) ⇒
+          if (current - last > nanos || acc.size >= maxSize) Process.emit((current, acc)) ++ go(Vector(), current)
+          else go(acc, last)
+
+        case ReceiveR(i) ⇒
+          if (acc.size + 1 >= maxSize) Process.emit((System.nanoTime, acc :+ i)) ++ go(Vector(), last)
+          else go(acc :+ i, last)
+
+        case HaltOne(e) ⇒
+          if (!acc.isEmpty) Process.emit((System.nanoTime, acc)) ++ Process.Halt(e)
+          else Process.Halt(e)
+      }
+
+    go(Vector(), System.nanoTime)
+  }
+
+  val letter = Gen.alphaLowerChar
+
+  def chars: Process[Task, Char] = {
+    def go(i: Char): Process[Task, Char] =
+      Process.await(Task.delay(i)) { i ⇒
+        Thread.sleep(100)
+        Process.emit(i) ++ go(letter.sample.getOrElse('a'))
+      }
+    go(letter.sample.getOrElse('a'))
+  }
+
+  def discreteST(stepMs: Long): Process[Task, Long] = Process.suspend {
+    Process.repeatEval {
+      Task.delay { Thread.sleep(stepMs); System.nanoTime }
+    }
+  }
+
+  "Process stream of symbols" should {
+    "have performed word count on microBatch" in {
+      import scalaz._
+      import Scalaz._
+      val batchDuration = FiniteDuration(3, TimeUnit.SECONDS)
+      val S = Strategy.Executor(newScheduledThreadPool(3, new NamedThreadFactory("micro-batch-wc")))
+
+      (discreteST(50) wye chars)(microBatch(batchDuration))(S)
+        .map(data ⇒ data._2.foldMap { i ⇒ Map(i -> 1) })
+        .to(scalaz.stream.sink.lift[Task, Map[Char, Int]] { map ⇒ Task.delay(logger.info(map)) })
+        .take(10)
+        .runLog.run
       1 === 1
     }
   }
