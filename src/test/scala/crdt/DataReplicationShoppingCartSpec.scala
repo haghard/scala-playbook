@@ -3,7 +3,7 @@ package crdt
 import java.util.concurrent.Executors._
 import com.twitter.util.CountDownLatch
 import mongo.MongoProgram.NamedThreadFactory
-import org.apache.log4j.Logger
+
 import org.scalacheck.Prop._
 import org.scalacheck.Properties
 
@@ -13,8 +13,11 @@ import scalaz.stream.{ Process, async }
 
 object DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCart") {
   import Replication._
+  val l = org.apache.log4j.Logger.getLogger("ShoppingCart")
 
   property("Preserve order concurrent operation that are happening with Akka") = forAll { (p: Vector[String], cancelled: List[Int]) ⇒
+    l.info("Wishes: " + p + " cancelled: " + cancelled)
+
     implicit val collector = new TrieMap[Int, Set[String]]
     type RType[T] = akka.contrib.datareplication.ORSet[T]
 
@@ -25,6 +28,7 @@ object DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCar
     val replicas = async.boundedQueue[Int](Size)(R)
 
     val purchases = p.toSet.&~(cancelled.map(p(_)).toSet).map("product-" + _)
+    l.info("purchases: " + purchases)
 
     val latch = new CountDownLatch(replicasN.size)
     replicasN.foreach { replicas.enqueueOne(_).run }
@@ -38,7 +42,7 @@ object DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCar
 
     val Writer = (ops to input.enqueue).drain.onComplete(Process.eval_(input.close))
 
-    val replicator = replicatorFor[RType, String](RCore)
+    val replicator = replicatorChannelFor[RType, String](RCore)
 
     Writer.merge(
       replicas.dequeue.map {
@@ -50,9 +54,8 @@ object DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCar
     latch.await()
     replicator.close.run
 
-    //check first 2, bare minimum
-    replicasN.size == replicasN.size
-    collector(replicasN.head) == purchases
-    collector(replicasN.tail.head) == purchases
+    (replicasN.size == replicasN.size) :| "Result size violation" &&
+      (collector(replicasN.head) == purchases) :| "Head violation" &&
+      (collector(replicasN.tail.head) == purchases) :| "Next violation"
   }
 }

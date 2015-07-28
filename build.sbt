@@ -58,7 +58,7 @@ libraryDependencies ++= Seq(
     "org.scodec"          %% "scodec-stream"       % "0.9.0",
     "com.twitter"         %% "util-core"           % "6.23.0",
     "com.google.guava"    %  "guava"               % "18.0",
-    "com.rbmhtechnology"  %% "eventuate"           % "0.2.1",
+    "com.rbmhtechnology"  %% "eventuate"           % "0.2.2",
     "com.github.patriknw" %% "akka-data-replication" % "0.11",
     "org.scala-stm"       %% "scala-stm"           % "0.7"
 )
@@ -74,6 +74,7 @@ libraryDependencies ++= Seq(
   "de.bwaldvogel"       %   "mongo-java-server"     %   "1.4.1",
   "org.scalatest"       %%  "scalatest"             %   "2.2.5"     %   "test",
   "org.specs2"          %%  "specs2"                %   "2.4.15"    %   "test",
+  "org.scalacheck"      %%  "scalacheck"            %   "1.12.4"    %   "test",
   "org.reactivestreams" %   "reactive-streams-tck"  %   "1.0.0"     %   "test"
 )
 

@@ -12,7 +12,7 @@ import scalaz.stream.async.mutable.{ Signal, Queue }
 
 object Replication {
 
-  val Size = 20
+  val Size = 10
   val P = scalaz.stream.Process
   val replicasN = Set(1, 2, 3, 4)
 
@@ -35,8 +35,18 @@ object Replication {
   implicit def DropArbitrary: org.scalacheck.Arbitrary[List[Int]] =
     Arbitrary(genBoundedList[Int](Size / 2, Gen.chooseNum(0, Size - 1)))
 
-  implicit def BuyArbitrary: org.scalacheck.Arbitrary[Vector[String]] =
-    Arbitrary(genBoundedVector[String](Size, Gen.uuid.map { _.toString }))
+  /*implicit def BuyArbitrary: org.scalacheck.Arbitrary[Vector[String]] =
+    Arbitrary(genBoundedVector[String](Size, Gen.uuid.map { _.toString }))*/
+
+  //for Debug
+  implicit def BuyArbitraryDebug: org.scalacheck.Arbitrary[Vector[String]] =
+    Arbitrary(genBoundedVector[String](Size,
+      for {
+        a ← Gen.alphaUpperChar
+        b ← Gen.alphaLowerChar
+        c ← Gen.alphaUpperChar
+      } yield new String(Array(a, b, c))
+    ))
 
   trait Replica[F[_], T] {
     protected val ADD = """add-(.+)""".r
@@ -44,12 +54,12 @@ object Replication {
 
     protected var num: Int = 0
     private var input: Queue[T] = null
-    private var replicator: Signal[F[T]] = null
+    private var replicationChannel: Signal[F[T]] = null
 
     private def create(n: Int, i: Queue[T], r: Signal[F[T]]): Replica[F, T] = {
       num = n
       input = i
-      replicator = r
+      replicationChannel = r
       this
     }
 
@@ -59,10 +69,10 @@ object Replication {
 
     def task(collector: TrieMap[Int, Set[T]]): Task[Unit] =
       input.dequeue.flatMap { action ⇒
-        P.eval(replicator.compareAndSet(c ⇒ Some(merge(action, c.get))))
+        P.eval(replicationChannel.compareAndSet(c ⇒ Some(merge(action, c.get))))
         /*zip P.eval(replicator.get))
           .map(out ⇒ LoggerI.info(s"Replica:$numR Order:${out._2.value} VT:[${out._2.versionedEntries}] Local-VT:[$localTime]"))*/
-      }.onComplete(P.eval(Task.now(collector += num -> elements(replicator.get.run))))
+      }.onComplete(P.eval(Task.now(collector += num -> elements(replicationChannel.get.run))))
         .run[Task]
   }
 
@@ -71,8 +81,8 @@ object Replication {
     def apply[F[_], T](n: Int, i: Queue[T], S: Strategy)(implicit replica: Replica[F, T], zero: F[T]): Replica[F, T] =
       replica.create(n, i, async.signalOf[F[T]](zero)(S))
 
-    def apply[F[_], T](n: Int, i: Queue[T], replicator: Signal[F[T]])(implicit replica: Replica[F, T]): Replica[F, T] =
-      replica.create(n, i, replicator)
+    def apply[F[_], T](n: Int, i: Queue[T], rChannel: Signal[F[T]])(implicit replica: Replica[F, T]): Replica[F, T] =
+      replica.create(n, i, rChannel)
 
     implicit def eventuateR = akka.contrib.datareplication.Replicas.eventuateReplica()
     implicit def akkaR = akka.contrib.datareplication.Replicas.akkaReplica()
@@ -81,5 +91,6 @@ object Replication {
   implicit val evenSet = com.rbmhtechnology.eventuate.crdt.ORSet[String]()
   implicit val akkaSet = akka.contrib.datareplication.ORSet.empty[String]
 
-  def replicatorFor[F[_], T](S: Strategy)(implicit zero: F[T]) = async.signalOf[F[T]](zero)(S)
+  def replicatorChannelFor[F[_], T](S: Strategy)(implicit zero: F[T]) =
+    async.signalOf[F[T]](zero)(S)
 }

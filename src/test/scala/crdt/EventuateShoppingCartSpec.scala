@@ -3,8 +3,10 @@ package crdt
 import java.util.concurrent.Executors._
 
 import scalaz.concurrent.Strategy
+
+import org.scalacheck.Prop._
 import org.scalacheck.Properties
-import org.scalacheck.Prop.forAll
+
 import com.twitter.util.CountDownLatch
 import mongo.MongoProgram.NamedThreadFactory
 import scalaz.stream.{ Process, async }
@@ -15,10 +17,14 @@ import scala.collection.concurrent.TrieMap
  * Once replica received operation we update own state and send it in to replication channel
  * which emulated using [[scalaz.stream.async.mutable.Signal]]
  */
-object EventuateShoppingCartSpec extends Properties("EShoppingCart") {
+class EventuateShoppingCartSpec extends Properties("ShoppingCart") {
   import Replication._
 
-  property("Preserve order concurrent operation that are happening with Eventuate") = forAll { (p: Vector[String], cancelled: List[Int]) ⇒
+  val l = org.apache.log4j.Logger.getLogger("ShoppingCart")
+
+  property("Eventuate ORSet") = forAll { (p: Vector[String], cancelled: List[Int]) ⇒
+    l.info("Wishes: " + p + " cancelled: " + cancelled)
+
     implicit val collector = new TrieMap[Int, Set[String]]
     type RType[T] = com.rbmhtechnology.eventuate.crdt.ORSet[T]
 
@@ -26,6 +32,7 @@ object EventuateShoppingCartSpec extends Properties("EShoppingCart") {
     val replicas = async.boundedQueue[Int](Size)(R)
 
     val purchases = p.toSet.&~(cancelled.map(p(_)).toSet).map("product-" + _)
+    l.info("purchases: " + purchases)
 
     val latch = new CountDownLatch(replicasN.size)
     replicasN.foreach { replicas.enqueueOne(_).run }
@@ -41,7 +48,7 @@ object EventuateShoppingCartSpec extends Properties("EShoppingCart") {
 
     val RCore = Strategy.Executor(newFixedThreadPool(
       Runtime.getRuntime.availableProcessors(), new NamedThreadFactory("r-core")))
-    val replicator = replicatorFor[RType, String](RCore)
+    val replicator = replicatorChannelFor[RType, String](RCore)
 
     Writer.merge(
       replicas.dequeue.map { n ⇒
@@ -53,9 +60,8 @@ object EventuateShoppingCartSpec extends Properties("EShoppingCart") {
     latch.await()
     replicator.close.run
 
-    //check first 2, bare minimum
-    replicasN.size == replicasN.size
-    collector(replicasN.head) == purchases
-    collector(replicasN.tail.head) == purchases
+    (replicasN.size == replicasN.size) :| "Result size violation" &&
+      (collector(replicasN.head) == purchases) :| "Head violation" &&
+      (collector(replicasN.tail.head) == purchases) :| "Next violation"
   }
 }
