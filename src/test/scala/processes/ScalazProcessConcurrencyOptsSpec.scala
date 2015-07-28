@@ -1,17 +1,17 @@
 package processes
 
-import java.util.concurrent.{ TimeUnit, CountDownLatch }
-import java.util.concurrent.Executors._
-import mongo.MongoProgram.NamedThreadFactory
-import org.apache.log4j.Logger
 import org.scalacheck.Gen
-import org.specs2.mutable.Specification
-import scala.collection.IndexedSeq
-import scala.concurrent.SyncVar
-import scala.concurrent.duration.{ FiniteDuration, Duration }
-import scala.concurrent.forkjoin.ThreadLocalRandom
-import scalaz.stream.Process._
+import org.apache.log4j.Logger
 import scalaz.{ \/-, -\/, \/ }
+import scalaz.stream.Process._
+import scala.concurrent.SyncVar
+import scala.collection.IndexedSeq
+import java.util.concurrent.Executors._
+import org.specs2.mutable.Specification
+import mongo.MongoProgram.NamedThreadFactory
+import scala.concurrent.forkjoin.ThreadLocalRandom
+import java.util.concurrent.{ TimeUnit, CountDownLatch }
+import scala.concurrent.duration.{ FiniteDuration, Duration }
 
 import scalaz.stream._
 import scalaz.concurrent.{ Strategy, Task }
@@ -177,23 +177,21 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
     }
   }
 
-  def microBatch[I](duration: Duration, maxSize: Int = Int.MaxValue): scalaz.stream.Wye[Long, I, (Long, Vector[I])] = {
+  def microBatch[I](duration: Duration, maxSize: Int = Int.MaxValue): scalaz.stream.Wye[Long, I, Vector[I]] = {
     import scalaz.stream.ReceiveY.{ HaltOne, ReceiveL, ReceiveR }
-    val nanos = duration.toNanos
+    val timeWindow = duration.toNanos
 
-    def go(acc: Vector[I], last: Long): Wye[Long, I, (Long, Vector[I])] =
+    def go(acc: Vector[I], last: Long): Wye[Long, I, Vector[I]] =
       P.awaitBoth[Long, I].flatMap {
         case ReceiveL(current) ⇒
-          if (current - last > nanos || acc.size >= maxSize) Process.emit((current, acc)) ++ go(Vector(), current)
+          if (current - last > timeWindow || acc.size >= maxSize) P.emit(acc) ++ go(Vector(), current)
           else go(acc, last)
-
         case ReceiveR(i) ⇒
-          if (acc.size + 1 >= maxSize) Process.emit((System.nanoTime, acc :+ i)) ++ go(Vector(), last)
+          if (acc.size + 1 >= maxSize) P.emit(acc :+ i) ++ go(Vector(), last)
           else go(acc :+ i, last)
-
         case HaltOne(e) ⇒
-          if (!acc.isEmpty) Process.emit((System.nanoTime, acc)) ++ Process.Halt(e)
-          else Process.Halt(e)
+          if (!acc.isEmpty) P.emit(acc) ++ P.Halt(e)
+          else P.Halt(e)
       }
 
     go(Vector(), System.nanoTime)
@@ -210,23 +208,25 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
     go(letter.sample.getOrElse('a'))
   }
 
-  def discreteST(stepMs: Long): Process[Task, Long] = Process.suspend {
+  def discreteTime(stepMs: Long = 50l): Process[Task, Long] = Process.suspend {
     Process.repeatEval {
       Task.delay { Thread.sleep(stepMs); System.nanoTime }
     }
   }
 
   "Process stream of symbols" should {
-    "have performed word count on microBatch" in {
+    "have performed symbol count on time window" in {
       import scalaz._
       import Scalaz._
-      val batchDuration = FiniteDuration(3, TimeUnit.SECONDS)
+      val windowDuration = FiniteDuration(3, TimeUnit.SECONDS)
       val S = Strategy.Executor(newScheduledThreadPool(3, new NamedThreadFactory("micro-batch-wc")))
 
-      (discreteST(50) wye chars)(microBatch(batchDuration))(S)
-        .map(data ⇒ data._2.foldMap { i ⇒ Map(i -> 1) })
+      (discreteTime() wye chars)(microBatch(windowDuration))(S)
+        .map(data ⇒ data.foldMap(i ⇒ Map(i -> 1)))
         .to(scalaz.stream.sink.lift[Task, Map[Char, Int]] { map ⇒ Task.delay(logger.info(map)) })
         .take(10)
+        .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); P.halt }
+        .onComplete { P.eval(Task.delay(logger.debug(s"Process [symbol-count] has been completed"))) }
         .runLog.run
       1 === 1
     }
