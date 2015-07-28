@@ -20,19 +20,17 @@ import scala.collection.concurrent.TrieMap
 class EventuateShoppingCartSpec extends Properties("ShoppingCart") {
   import Replication._
 
-  val l = org.apache.log4j.Logger.getLogger("ShoppingCart")
-
   property("Eventuate ORSet") = forAll { (p: Vector[String], cancelled: List[Int]) ⇒
-    l.info("Wishes: " + p + " cancelled: " + cancelled)
+    ShoppingCartLog.info("Wishes: " + p + " cancelled: " + cancelled)
 
-    implicit val collector = new TrieMap[Int, Set[String]]
+    val collector = new TrieMap[Int, Set[String]]
     type RType[T] = com.rbmhtechnology.eventuate.crdt.ORSet[T]
 
     val input = async.boundedQueue[String](Size)(R)
     val replicas = async.boundedQueue[Int](Size)(R)
 
     val purchases = p.toSet.&~(cancelled.map(p(_)).toSet).map("product-" + _)
-    l.info("purchases: " + purchases)
+    ShoppingCartLog.info("purchases: " + purchases)
 
     val latch = new CountDownLatch(replicasN.size)
     replicasN.foreach { replicas.enqueueOne(_).run }

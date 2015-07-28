@@ -1,10 +1,10 @@
 package akka.contrib.datareplication
 
 import akka.actor.Address
+import org.apache.log4j.Logger
+import crdt.Replication.Replica
 import akka.cluster.UniqueAddress
 import com.rbmhtechnology.eventuate.VectorTime
-import crdt.Replication.Replica
-import org.apache.log4j.Logger
 
 object Replicas {
 
@@ -43,7 +43,6 @@ object Replicas {
           val vc = s.add(node, v)
           LoggerAkka.info(s"Added $v\n ON $node\n ${vc.elementsMap}\n")
           vc
-
         case DROP(v) ⇒
           val vc = s.remove(node, v)
           LoggerAkka.info(s"Dropped $v\n ON $node\n  ${vc.elementsMap}\n")

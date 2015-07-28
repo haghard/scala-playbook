@@ -13,12 +13,11 @@ import scalaz.stream.{ Process, async }
 
 object DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCart") {
   import Replication._
-  val l = org.apache.log4j.Logger.getLogger("ShoppingCart")
 
-  property("Preserve order concurrent operation that are happening with Akka") = forAll { (p: Vector[String], cancelled: List[Int]) ⇒
-    l.info("Wishes: " + p + " cancelled: " + cancelled)
+  property("Akka ORSet") = forAll { (p: Vector[String], cancelled: List[Int]) ⇒
+    ShoppingCartLog.info("Wishes: " + p + " cancelled: " + cancelled)
 
-    implicit val collector = new TrieMap[Int, Set[String]]
+    val collector = new TrieMap[Int, Set[String]]
     type RType[T] = akka.contrib.datareplication.ORSet[T]
 
     val RCore = Strategy.Executor(newFixedThreadPool(Runtime.getRuntime.availableProcessors(),
@@ -28,7 +27,7 @@ object DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCar
     val replicas = async.boundedQueue[Int](Size)(R)
 
     val purchases = p.toSet.&~(cancelled.map(p(_)).toSet).map("product-" + _)
-    l.info("purchases: " + purchases)
+    ShoppingCartLog.info("purchases: " + purchases)
 
     val latch = new CountDownLatch(replicasN.size)
     replicasN.foreach { replicas.enqueueOne(_).run }

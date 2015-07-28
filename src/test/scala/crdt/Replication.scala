@@ -12,6 +12,8 @@ import scalaz.stream.async.mutable.{ Signal, Queue }
 
 object Replication {
 
+  val ShoppingCartLog = org.apache.log4j.Logger.getLogger("ShoppingCart")
+
   val Size = 10
   val P = scalaz.stream.Process
   val replicasN = Set(1, 2, 3, 4)
