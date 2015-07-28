@@ -177,8 +177,7 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
     }
   }
 
-  import scalaz.stream.Wye
-  def microBatch[I](duration: Duration, maxSize: Int = Int.MaxValue): Wye[Long, I, (Long, Vector[I])] = {
+  def microBatch[I](duration: Duration, maxSize: Int = Int.MaxValue): scalaz.stream.Wye[Long, I, (Long, Vector[I])] = {
     import scalaz.stream.ReceiveY.{ HaltOne, ReceiveL, ReceiveR }
     val nanos = duration.toNanos
 
