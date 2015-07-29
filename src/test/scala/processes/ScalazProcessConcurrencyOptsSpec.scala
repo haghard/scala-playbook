@@ -220,11 +220,14 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
       import Scalaz._
       val windowDuration = FiniteDuration(3, TimeUnit.SECONDS)
       val S = Strategy.Executor(newScheduledThreadPool(3, new NamedThreadFactory("micro-batch-wc")))
+      val LSink = scalaz.stream.sink.lift[Task, Map[Char, Int]] { map ⇒ Task.delay(logger.info(map)) }
 
       (discreteTime() wye discreteChars())(microBatch(windowDuration))(S)
         .map(data ⇒ data.foldMap(i ⇒ Map(i -> 1)))
-        .to(scalaz.stream.sink.lift[Task, Map[Char, Int]] { map ⇒ Task.delay(logger.info(map)) })
+        .observe(LSink)
         .take(10)
+        .foldMonoid
+        .to(LSink)
         .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); P.halt }
         .onComplete { P.eval(Task.delay(logger.debug(s"Process [symbol-count] has been completed"))) }
         .runLog.run
