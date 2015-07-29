@@ -199,10 +199,10 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
 
   val letter = Gen.alphaLowerChar
 
-  def chars: Process[Task, Char] = {
+  def discreteChars(stepMs: Long = 100l): Process[Task, Char] = {
     def go(i: Char): Process[Task, Char] =
       Process.await(Task.delay(i)) { i ⇒
-        Thread.sleep(100)
+        Thread.sleep(stepMs)
         Process.emit(i) ++ go(letter.sample.getOrElse('a'))
       }
     go(letter.sample.getOrElse('a'))
@@ -221,7 +221,7 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
       val windowDuration = FiniteDuration(3, TimeUnit.SECONDS)
       val S = Strategy.Executor(newScheduledThreadPool(3, new NamedThreadFactory("micro-batch-wc")))
 
-      (discreteTime() wye chars)(microBatch(windowDuration))(S)
+      (discreteTime() wye discreteChars())(microBatch(windowDuration))(S)
         .map(data ⇒ data.foldMap(i ⇒ Map(i -> 1)))
         .to(scalaz.stream.sink.lift[Task, Map[Char, Int]] { map ⇒ Task.delay(logger.info(map)) })
         .take(10)
