@@ -20,12 +20,10 @@ class EventuateConcurrentVersionsSpec extends Specification {
         .update("C", vectorTime(1,1,1))
         .conflict === false
 
-      println(cvt.all)
-
       cvt.update("D", vectorTime(1,1,0))
 
-      val branch = cvt.all.head.updateTimestamp
-      //val branch = cvt.all.tail.head.updateTimestamp
+      val winner = cvt.all.head.updateTimestamp
+      //val winner = cvt.all.tail.head.updateTimestamp
       cvt.conflict === true
 
       cvt.all.map(_.value).head === "A-B-C"
@@ -33,10 +31,9 @@ class EventuateConcurrentVersionsSpec extends Specification {
 
       println(cvt.all)
 
-      //val merged = branch.merge(cvt.all.head.updateTimestamp)
-      val merged = branch.merge(cvt.all.tail.head.updateTimestamp)
+      val merged = cvt.all.map(_.updateTimestamp).reduce(_ merge _)
 
-      cvt.resolve(branch, merged)
+      cvt.resolve(winner, merged)
       println(cvt.all)
       cvt.conflict === false
 
