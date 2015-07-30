@@ -11,7 +11,7 @@ import scala.collection.concurrent.TrieMap
 import scalaz.concurrent.Strategy
 import scalaz.stream.{ Process, async }
 
-object DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCart") {
+class DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCart") {
   import Replication._
 
   property("AkkaDataReplication ORSet") = forAll(

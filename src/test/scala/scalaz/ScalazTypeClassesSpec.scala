@@ -159,6 +159,40 @@ class ScalazTypeClassesSpec extends Specification {
       (List("hi", "hello") |@| List("?", "!"))(_ + _) === List("hi?", "hi!", "hello?", "hello!")
     }
 
+    "Construct Applicative/Monad with type and value" in {
+      final class WrapHelper[F[_]] {
+        def apply[A](a: A)(implicit ev: Applicative[F]): F[A] =
+          ev.point(a)
+      }
+
+      /*
+      It works fine, but you must supply both type arguments even
+      though the second is inferable.
+      def wrap[F[_]: Applicative, A](a: A): F[A] =
+        Applicative[F].point(a)
+        */
+
+      def wrap[F[_]] = new WrapHelper[F]
+
+      import scala.language.reflectiveCalls
+      def wrapS[F[_]] = new {
+        def apply[A](a: A)(implicit ev: Applicative[F]): F[A] =
+          ev.point(a)
+      }
+
+      def wrapM[F[_]] = new {
+        def apply[A](a: A)(implicit ev: Monad[F]): F[A] =
+          ev.point(a)
+      }
+
+      wrap[List](1) === List(1)
+      wrap[Option](1) === Some(1)
+      wrapS[List](1) === List(1)
+      wrapS[Option](1) === Some(1)
+      wrapM[List](1) === List(1)
+      wrapM[Option](1) === Some(1)
+    }
+
     "Sequence" in {
       List(1.some, 2.some).sequence === Some(List(1, 2))
     }
