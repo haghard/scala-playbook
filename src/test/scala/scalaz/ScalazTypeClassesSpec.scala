@@ -159,7 +159,8 @@ class ScalazTypeClassesSpec extends Specification {
       (List("hi", "hello") |@| List("?", "!"))(_ + _) === List("hi?", "hi!", "hello?", "hello!")
     }
 
-    "Construct Applicative/Monad with type and value" in {
+    "Curried Type Parameters" in {
+      //Construct Applicative/Monad with type and value
       final class WrapHelper[F[_]] {
         def apply[A](a: A)(implicit ev: Applicative[F]): F[A] =
           ev.point(a)
