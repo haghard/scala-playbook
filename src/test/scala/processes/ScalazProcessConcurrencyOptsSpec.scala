@@ -135,43 +135,57 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
    * The resulting streams can be pulled independently on different rates,
    * though they will propagate back pressure if one of them is running too far ahead of the other
    */
-  def broadcast2[T](source: Process[Task, T], limit: Int = 10)(implicit S: scalaz.concurrent.Strategy): Process[Task, (Process[Task, T], Process[Task, T])] = {
-    val left = async.boundedQueue[T](limit)
-    val right = async.boundedQueue[T](limit)
-    val qWriter = (source observe left.enqueue observe right.enqueue).drain
-      .onComplete(Process.eval_ { logger.info("All input was scheduled."); left.close.flatMap(_ ⇒ right.close) })
-    (qWriter.drain merge P.emit((left.dequeue, right.dequeue)))
+  def broadcastN[T](n: Int = 2, source: Process[Task, T], limit: Int = 10)(implicit S: scalaz.concurrent.Strategy): Process[Task, Seq[Process[Task, T]]] = {
+    val queues = (0 until n) map (_ ⇒ async.boundedQueue[T](limit)(S))
+    val qWriter = queues.foldLeft(source)((s, q) ⇒ s.observe(q.enqueue)).drain
+      .onComplete {
+        Process.eval {
+          logger.info("All input was scheduled.")
+          Task.gatherUnordered(queues.map(_.close))
+        }
+      }
+    (qWriter.drain merge P.emit(queues.map(_.dequeue)))(S)
   }
 
-  "Broadcast single process in 2 output processes where one of them degrade slowly" should {
+  "Broadcast single process for N output processes with degradation" should {
     "have gapped at most of queue size and slow down the whole flow" in {
       implicit val E = newFixedThreadPool(4, new NamedThreadFactory("broadcast"))
       implicit val S = Strategy.Executor(E)
 
-      val digits = P.emitAll(1 to 35)
+      val source = P.emitAll(1 to 35)
       val latch = new CountDownLatch(1)
       var latency = 0
       val p = for {
-        both ← broadcast2(digits)
+        both ← broadcastN(3, source)
 
-        right = both._1.zip(P.repeatEval(Task {
+        consumer0 = both(0).zip(P.repeatEval(Task {
           val delayPerMsg = 500
           Thread.sleep(delayPerMsg)
           delayPerMsg
-        })).map(r ⇒ logger.info(s"${r._2} fetch left ${r._1}"))
+        })).map(r ⇒ logger.info(s"${r._2} consumer_0 ${r._1}"))
 
-        left = both._2.zip(P.repeatEval(Task {
+        //degrade on every iteration by 20
+        consumer1 = both(1).zip(P.repeatEval(Task {
+          val init = 500
+          latency += 20
+          val delay = init + latency
+          Thread.sleep(delay)
+          delay
+        })).map(r ⇒ logger.info(s"${r._2} consumer_1 ${r._1}"))
+
+        //degrade on every iteration by 30
+        consumer2 = both(2).zip(P.repeatEval(Task {
           val init = 500
           latency += 30
           val delay = init + latency
           Thread.sleep(delay)
           delay
-        })).map(r ⇒ logger.info(s"${r._2} fetch right ${r._1}"))
+        })).map(r ⇒ logger.info(s"${r._2} consumer_2 ${r._1}"))
 
-        _ ← right merge left
+        _ ← ((consumer0 merge consumer1) merge consumer2)
       } yield ()
 
-      p.onComplete(P.eval(Task.delay { logger.info("Consumer are done"); latch.countDown() })).run.runAsync(_ ⇒ ())
+      p.onComplete(P.eval(Task.delay { logger.info("Consumers have done"); latch.countDown() })).run.runAsync(_ ⇒ ())
       latch.await
       1 === 1
     }

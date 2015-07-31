@@ -1,7 +1,7 @@
 package crdt
 
 import org.specs2.mutable.Specification
-import com.rbmhtechnology.eventuate.{Versioned, VectorTime, ConcurrentVersionsTree, ConcurrentVersions}
+import com.rbmhtechnology.eventuate.{ Versioned, VectorTime, ConcurrentVersionsTree, ConcurrentVersions }
 
 class EventuateConcurrentVersionsSpec extends Specification {
 
@@ -10,17 +10,17 @@ class EventuateConcurrentVersionsSpec extends Specification {
 
   "ConcurrentVersionsTree conflict" should {
     "have resolved with first version" in {
-      val append: (String, String) => String =
-        (a, b) => if (a == null) b else s"$a-$b"
+      val append: (String, String) ⇒ String =
+        (a, b) ⇒ if (a == null) b else s"$a-$b"
 
       val cvt: ConcurrentVersions[String, String] = ConcurrentVersionsTree(append)
 
-      cvt.update("A", vectorTime(1,0,0))
-        .update("B", vectorTime(1,1,0))
-        .update("C", vectorTime(1,1,1))
+      cvt.update("A", vectorTime(1, 0, 0))
+        .update("B", vectorTime(1, 1, 0))
+        .update("C", vectorTime(1, 1, 1))
         .conflict === false
 
-      cvt.update("D", vectorTime(1,1,0))
+      cvt.update("D", vectorTime(1, 1, 0))
 
       val winner = cvt.all(0).updateTimestamp
       //val winner = cvt.all(1).updateTimestamp
