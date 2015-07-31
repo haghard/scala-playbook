@@ -4,18 +4,17 @@ import java.util.concurrent.Executors
 
 import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
-
-import scala.annotation.tailrec
 import org.specs2.mutable.Specification
 
+import scala.annotation.tailrec
 import scala.concurrent.forkjoin.ThreadLocalRandom
-import scalaz.Monoid
+import scalaz.Scalaz._
+import scalaz.{Monoid, _}
 import scalaz.concurrent.Task
-import scalaz._
-import Scalaz._
 
 class BTreeStructuralRecursionSpec extends Specification {
-  import tree.{ node, invert, foldLeft, foldMap, foldMapPar, depth }
+
+  import tree.{depth, foldLeft, foldMap, foldMapPar, invert, node}
 
   implicit val M = scalaz.Monoid[Int]
 
@@ -141,7 +140,7 @@ class BTreeStructuralRecursionSpec extends Specification {
       Node(value, left, right)
 
     private def foldLoop[A, B](t: Tree[A], z: B)(f: (B, A, B) ⇒ B): B = t match {
-      case Leaf          ⇒ z
+      case Leaf ⇒ z
       case Node(v, l, r) ⇒ f(foldLoop(l, z)(f), v, foldLoop(r, z)(f))
     }
 
@@ -174,7 +173,7 @@ class BTreeStructuralRecursionSpec extends Specification {
     override def foldMap[T, A](fa: Tree[T])(f: (T) ⇒ A)(implicit m: Monoid[A]): A = {
       def foldMap0(fa: Tree[T], n: Long = 0l)(f: (T) ⇒ A)(implicit m: Monoid[A]): A =
         fa match {
-          case Leaf                ⇒ m.zero
+          case Leaf ⇒ m.zero
           case Node(v, Leaf, Leaf) ⇒ f(v)
           case Node(v, l, r) ⇒
             if (n % 2 == 0) m.append(foldMap0(l, n + 1)(f)(m), m.append(f(v), foldMap0(r, n + 1)(f)(m)))
@@ -186,7 +185,9 @@ class BTreeStructuralRecursionSpec extends Specification {
     override def foldMap2[T, A](fa: Option[Tree[T]])(f: (T) ⇒ A)(implicit m: Monoid[A]): A = ???
 
     override def foldMapPar[T, A](fa: Tree[T])(f: (T) ⇒ A)(implicit M: Monoid[A]): Task[A] =
-      Task.now(fa).flatMap { foldMap(_)(e ⇒ Task.delay(f(e)))(monoidPar(M)) }
+      Task.now(fa).flatMap {
+        foldMap(_)(e ⇒ Task.delay(f(e)))(monoidPar(M))
+      }
 
     def monoidPar[A](m: Monoid[A]): Monoid[Task[A]] = new Monoid[Task[A]] {
       implicit val S = Executors.newFixedThreadPool(3, new NamedThreadFactory("btree-par-monoid"))
@@ -206,7 +207,7 @@ class BTreeStructuralRecursionSpec extends Specification {
 
   implicit class TreeSyntax[T](self: Tree[T])(implicit ord: scala.math.Ordering[T]) {
     @tailrec private def scan(searched: T, t: Tree[T]): Option[T] = t match {
-      case Leaf                                  ⇒ None
+      case Leaf ⇒ None
       case Node(v, left, right) if searched == v ⇒ Option(v)
       case Node(v, left, right) ⇒
         if (ord.lt(searched, v)) {
@@ -231,16 +232,14 @@ class BTreeStructuralRecursionSpec extends Specification {
     def search(searched: T): Option[T] =
       scan(searched, self)
 
-    def :+(v: T): Tree[T] = {
-      (v, self) match {
-        case (value, Leaf) ⇒ node(value)
-        case (inserted, Node(a, left, right)) if inserted == a ⇒
-          Node(inserted, left, right)
-        case (inserted, Node(a, left, right)) if ord.lt(inserted, a) ⇒
-          Node(a, left :+ inserted, right)
-        case (inserted, Node(a, left, right)) if ord.gt(inserted, a) ⇒
-          Node(a, left, right :+ inserted)
-      }
+    def :+(v: T): Tree[T] = (v, self) match {
+      case (value, Leaf) ⇒ node(value)
+      case (inserted, Node(a, left, right)) if inserted == a ⇒
+        Node(inserted, left, right)
+      case (inserted, Node(a, left, right)) if ord.lt(inserted, a) ⇒
+        Node(a, left :+ inserted, right)
+      case (inserted, Node(a, left, right)) if ord.gt(inserted, a) ⇒
+        Node(a, left, right :+ inserted)
     }
   }
 }

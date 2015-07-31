@@ -1,7 +1,7 @@
 package crdt
 
 import org.specs2.mutable.Specification
-import com.rbmhtechnology.eventuate.{VectorTime, ConcurrentVersionsTree, ConcurrentVersions}
+import com.rbmhtechnology.eventuate.{Versioned, VectorTime, ConcurrentVersionsTree, ConcurrentVersions}
 
 class EventuateConcurrentVersionsSpec extends Specification {
 
@@ -22,23 +22,23 @@ class EventuateConcurrentVersionsSpec extends Specification {
 
       cvt.update("D", vectorTime(1,1,0))
 
-      val winner = cvt.all.head.updateTimestamp
-      //val winner = cvt.all.tail.head.updateTimestamp
+      val winner = cvt.all(0).updateTimestamp
+      //val winner = cvt.all(1).updateTimestamp
       cvt.conflict === true
 
-      cvt.all.map(_.value).head === "A-B-C"
-      cvt.all.map(_.value).tail.head === "A-D"
+      cvt.all(0).value === "A-B-C"
+      cvt.all(1).value === "A-D"
 
       println(cvt.all)
 
-      val merged = cvt.all.map(_.updateTimestamp).reduce(_ merge _)
+      val merged = cvt.all.map(_.updateTimestamp).reduce(_ merge _) //vectorTime(1,1,1)
 
       cvt.resolve(winner, merged)
       println(cvt.all)
       cvt.conflict === false
 
-      cvt.all.map(_.value).head == "A-B-C"
-      //cvt.all.map(_.value).head == "A-D"
+      cvt.all(0) === Versioned("A-B-C", merged)
+      //cvt.all(0) === Versioned("A-D",vectorTime(1,1,1))
     }
   }
 }
