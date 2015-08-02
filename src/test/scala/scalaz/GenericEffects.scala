@@ -55,7 +55,7 @@ class GenericEffects extends Specification {
         logF(s"[${t.runtimeClass.getName}] fetch address $a for user $user").map(_ ⇒ a)
       }
   }*/
-  //Function Composition with Effects
+  //Function Composition of Effects
   def program[M[_]: Monad](getUserF: Long ⇒ M[User],
                            getUserAddressF: User ⇒ M[Address],
                            logF: String ⇒ M[Unit])(id: Long)(implicit t: ClassTag[M[_]]): M[Address] = {
@@ -65,6 +65,7 @@ class GenericEffects extends Specification {
       _ ← logF(s"[${t.runtimeClass.getName}] fetch address $address for user $user")
     } yield address
   }
+
 
   "Id monad effect" in {
     val getUserF: Long ⇒ Id[User] = id ⇒ User(id, "Sherlock")
@@ -244,7 +245,7 @@ class GenericEffects extends Specification {
     val getUserF: Long ⇒ W[User] =
       id ⇒ {
         val u = User(id, "Sherlock")
-        u.set(Map("user" -> u.name))
+        u.set(Map(id.toString -> u.name))
       }
 
     val getAddressF: User ⇒ W[Address] =
@@ -256,8 +257,9 @@ class GenericEffects extends Specification {
     val logF: String ⇒ W[Unit] = r ⇒ logger.info(r).point[W]
 
     val rMap = program[W](getUserF, getAddressF, logF)(id).run._1
+    //val rMap = program[({ type λ[x] = Writer[Map[String, String], x] })#λ](getUserF, getAddressF, logF)(id).run._1
 
-    rMap("user") === "Sherlock"
-    rMap("address") === Address().street
+    rMap.get(id.toString) should be equalTo Some("Sherlock")
+    rMap.get("address") should be equalTo Some(Address().street)
   }
 }
