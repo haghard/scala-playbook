@@ -147,7 +147,6 @@ class ScalazProcessConcurrencyPatternSpec extends Specification {
     (qWriter.drain merge P.emit(queues.map(_.dequeue)))(S)
   }
 
-
   "Broadcast single process for N output processes with degradation" should {
     "have gapped at most of queue size and slow down the whole pipeline" in {
       implicit val E = newFixedThreadPool(4, new NamedThreadFactory("broadcast"))
@@ -269,10 +268,7 @@ class ScalazProcessConcurrencyPatternSpec extends Specification {
         .onComplete(P.eval_(InSystem.close))
         .run.runAsync { _ ⇒ logger.info("All input data was written") }
 
-      val reader: Process[Task, Int] = InSystem.dequeue
-      val writer: Sink[Task, Int] = OutSystem.enqueue
-
-      val Ex = Exchange(reader, writer)
+      val Ex = Exchange(InSystem.dequeue, OutSystem.enqueue)
 
       (Ex.read.map(_ * 2) to Ex.write)
         .onComplete(P.eval { OutSystem.close.map(_ ⇒ Task.delay(logger.info("All input has been transferred"))) })
