@@ -9,12 +9,12 @@ import org.specs2.mutable.Specification
 import scala.annotation.tailrec
 import scala.concurrent.forkjoin.ThreadLocalRandom
 import scalaz.Scalaz._
-import scalaz.{Monoid, _}
+import scalaz.{ Monoid, _ }
 import scalaz.concurrent.Task
 
 class BTreeStructuralRecursionSpec extends Specification {
 
-  import tree.{depth, foldLeft, foldMap, foldMapPar, invert, node}
+  import tree.{ depth, foldLeft, foldMap, foldMapPar, invert, node }
 
   implicit val M = scalaz.Monoid[Int]
 
@@ -134,21 +134,21 @@ class BTreeStructuralRecursionSpec extends Specification {
 
   object tree extends Foldable0[Tree] {
 
-    def nil[A]: Tree[A] = Leaf
+    def leaf[A]: Tree[A] = Leaf
 
-    def node[A](value: A, left: Tree[A] = nil, right: Tree[A] = nil): Tree[A] =
+    def node[A](value: A, left: Tree[A] = leaf, right: Tree[A] = leaf): Tree[A] =
       Node(value, left, right)
 
     private def foldLoop[A, B](t: Tree[A], z: B)(f: (B, A, B) ⇒ B): B = t match {
-      case Leaf ⇒ z
+      case Leaf          ⇒ z
       case Node(v, l, r) ⇒ f(foldLoop(l, z)(f), v, foldLoop(r, z)(f))
     }
 
     def map[A, B](tree: Tree[A])(f: A ⇒ B): Tree[B] =
-      foldLoop(tree, nil[B]) { (left, value, right) ⇒ Node(f(value), left, right) }
+      foldLoop(tree, leaf[B]) { (left, value, right) ⇒ Node(f(value), left, right) }
 
     def invert[A](tree: Tree[A]): Tree[A] =
-      foldLoop(tree, nil[A]) { (left, value, right) ⇒ Node(value, right, left) }
+      foldLoop(tree, leaf[A]) { (left, value, right) ⇒ Node(value, right, left) }
 
     def size[T](tree: Tree[T]): Int = foldLoop(tree, 0: Int) { (l, x, r) ⇒ l + r + 1 }
 
@@ -173,7 +173,7 @@ class BTreeStructuralRecursionSpec extends Specification {
     override def foldMap[T, A](fa: Tree[T])(f: (T) ⇒ A)(implicit m: Monoid[A]): A = {
       def foldMap0(fa: Tree[T], n: Long = 0l)(f: (T) ⇒ A)(implicit m: Monoid[A]): A =
         fa match {
-          case Leaf ⇒ m.zero
+          case Leaf                ⇒ m.zero
           case Node(v, Leaf, Leaf) ⇒ f(v)
           case Node(v, l, r) ⇒
             if (n % 2 == 0) m.append(foldMap0(l, n + 1)(f)(m), m.append(f(v), foldMap0(r, n + 1)(f)(m)))
@@ -207,14 +207,12 @@ class BTreeStructuralRecursionSpec extends Specification {
 
   implicit class TreeSyntax[T](self: Tree[T])(implicit ord: scala.math.Ordering[T]) {
     @tailrec private def scan(searched: T, t: Tree[T]): Option[T] = t match {
-      case Leaf ⇒ None
+      case Leaf                                  ⇒ None
       case Node(v, left, right) if searched == v ⇒ Option(v)
       case Node(v, left, right) ⇒
         if (ord.lt(searched, v)) {
-          println(s"Search: passed: $v")
           scan(searched, left)
         } else {
-          println(s"Search: passed: $v")
           scan(searched, right)
         }
     }

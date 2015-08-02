@@ -6,8 +6,8 @@ import scalaz.stream.async
 import scala.language.higherKinds
 import org.scalacheck.{ Arbitrary, Gen }
 import scala.collection.concurrent.TrieMap
-import mongo.MongoProgram.NamedThreadFactory
 import scalaz.concurrent.{ Task, Strategy }
+import mongo.MongoProgram.NamedThreadFactory
 import scalaz.stream.async.mutable.{ Signal, Queue }
 
 object Replication {

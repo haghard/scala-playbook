@@ -55,7 +55,7 @@ libraryDependencies ++= Seq(
     "org.monifu"          %% "monifu"              % "1.0-M1",
     "log4j"               %  "log4j"               % "1.2.14",
     "org.scalaz.netty"    %% "scalaz-netty"        % "0.2.1",
-    "org.scodec"          %% "scodec-stream"       % "0.9.0",
+    "org.scodec"          %% "scodec-stream"       % "0.10.0",
     "com.twitter"         %% "util-core"           % "6.23.0",
     "com.google.guava"    %  "guava"               % "18.0",
     "com.rbmhtechnology"  %% "eventuate"           % "0.2.2",

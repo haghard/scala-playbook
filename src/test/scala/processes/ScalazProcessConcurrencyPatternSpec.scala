@@ -16,7 +16,7 @@ import scala.concurrent.duration.{ FiniteDuration, Duration }
 import scalaz.stream._
 import scalaz.concurrent.{ Strategy, Task }
 
-class ScalazProcessConcurrencyOptsSpec extends Specification {
+class ScalazProcessConcurrencyPatternSpec extends Specification {
   val P = scalaz.stream.Process
   val logger = Logger.getLogger("proc-binding")
 
@@ -109,7 +109,7 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
 
       val qWriter: Process[Task, Unit] =
         (inWords to q.enqueue)
-          .drain.onComplete(Process.eval_ { PLogger.info("All input was scheduled. Close queue"); q.close })
+          .onComplete(Process.eval_ { PLogger.info("All input was scheduled. Close queue"); q.close })
 
       val mappers: Process[Task, Process[Task, Map[String, Int]]] =
         P.range(0, mSize) map { i ⇒
@@ -147,40 +147,47 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
     (qWriter.drain merge P.emit(queues.map(_.dequeue)))(S)
   }
 
+
   "Broadcast single process for N output processes with degradation" should {
-    "have gapped at most of queue size and slow down the whole flow" in {
+    "have gapped at most of queue size and slow down the whole pipeline" in {
       implicit val E = newFixedThreadPool(4, new NamedThreadFactory("broadcast"))
       implicit val S = Strategy.Executor(E)
 
       val source = P.emitAll(1 to 35)
       val latch = new CountDownLatch(1)
-      var latency = 0
       val p = for {
-        both ← broadcastN(3, source)
+        outs ← broadcastN(3, source)
 
-        consumer0 = both(0).zip(P.repeatEval(Task {
+        consumer0 = outs(0).zip(P.repeatEval(Task {
           val delayPerMsg = 500
           Thread.sleep(delayPerMsg)
           delayPerMsg
         })).map(r ⇒ logger.info(s"${r._2} consumer_0 ${r._1}"))
 
         //degrade on every iteration by 20
-        consumer1 = both(1).zip(P.repeatEval(Task {
-          val init = 500
-          latency += 20
-          val delay = init + latency
-          Thread.sleep(delay)
-          delay
-        })).map(r ⇒ logger.info(s"${r._2} consumer_1 ${r._1}"))
+        consumer1 = outs(1).zip(P.suspend {
+          @volatile var latency0 = 0
+          P.repeatEval(Task {
+            val init = 500
+            latency0 += 20
+            val delay = init + latency0
+            Thread.sleep(delay)
+            delay
+          })
+        }).map(r ⇒ logger.info(s"${r._2} consumer_1 ${r._1}"))
 
         //degrade on every iteration by 30
-        consumer2 = both(2).zip(P.repeatEval(Task {
-          val init = 500
-          latency += 30
-          val delay = init + latency
-          Thread.sleep(delay)
-          delay
-        })).map(r ⇒ logger.info(s"${r._2} consumer_2 ${r._1}"))
+
+        consumer2 = outs(2).zip(P.suspend {
+          @volatile var latency1 = 0
+          P.repeatEval(Task {
+            val init = 500
+            latency1 += 30
+            val delay = init + latency1
+            Thread.sleep(delay)
+            delay
+          })
+        }).map(r ⇒ logger.info(s"${r._2} consumer_2 ${r._1}"))
 
         _ ← ((consumer0 merge consumer1) merge consumer2)
       } yield ()
@@ -232,11 +239,12 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
     "have performed symbol count on time window" in {
       import scalaz._
       import Scalaz._
-      val windowDuration = FiniteDuration(3, TimeUnit.SECONDS)
-      val S = Strategy.Executor(newScheduledThreadPool(3, new NamedThreadFactory("micro-batch-wc")))
-      val LSink = scalaz.stream.sink.lift[Task, Map[Char, Int]] { map ⇒ Task.delay(logger.info(map)) }
+      import scalaz.stream.sink
+      val window = FiniteDuration(3, TimeUnit.SECONDS)
+      val S = Strategy.Executor(newFixedThreadPool(4, new NamedThreadFactory("micro-batch-wc")))
+      val LSink = sink.lift[Task, Map[Char, Int]](map ⇒ Task.delay(logger.info(map)))
 
-      (discreteTime() wye discreteChars())(microBatch(windowDuration))(S)
+      (discreteTime() wye discreteChars())(microBatch(window))(S)
         .map(data ⇒ data.foldMap(i ⇒ Map(i -> 1)))
         .observe(LSink)
         .take(10)
@@ -246,6 +254,33 @@ class ScalazProcessConcurrencyOptsSpec extends Specification {
         .onComplete { P.eval(Task.delay(logger.debug(s"Process [symbol-count] has been completed"))) }
         .runLog.run
       1 === 1
+    }
+  }
+
+  "Exchange" should {
+    "have transferred from InSystem to OutSystem" in {
+      val Size = 60
+      val I = Strategy.Executor(newFixedThreadPool(3, new NamedThreadFactory("exchange-worker")))
+      //values read from remote system
+      val InSystem = async.unboundedQueue[Int](I)
+      val OutSystem = async.unboundedQueue[Int](I)
+
+      (P.emitAll(1 to Size) to InSystem.enqueue)
+        .onComplete(P.eval_(InSystem.close))
+        .run.runAsync { _ ⇒ logger.info("All input data was written") }
+
+      val reader: Process[Task, Int] = InSystem.dequeue
+      val writer: Sink[Task, Int] = OutSystem.enqueue
+
+      val Ex = Exchange(reader, writer)
+
+      (Ex.read.map(_ * 2) to Ex.write)
+        .onComplete(P.eval { OutSystem.close.map(_ ⇒ Task.delay(logger.info("All input has been transferred"))) })
+        .runLog.run
+
+      val buffer = OutSystem.dequeueAvailable.runLog.run(0)
+      buffer.size === Size
+      buffer.reduce(_ + _) === (1 to Size).map(_ * 2).reduce(_ + _)
     }
   }
 }
