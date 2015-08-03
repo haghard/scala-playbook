@@ -21,7 +21,7 @@ import scalaz.stream.Process._
 import scalaz.stream.io
 import java.util.concurrent.atomic.{ AtomicReference ⇒ JavaAtomicReference }
 
-class GenericEffects extends Specification {
+class ComposableEffects extends Specification {
   val P = scalaz.stream.Process
   val logger = Logger.getLogger("effects")
 
@@ -55,7 +55,7 @@ class GenericEffects extends Specification {
         logF(s"[${t.runtimeClass.getName}] fetch address $a for user $user").map(_ ⇒ a)
       }
   }*/
-  //Function Composition of Effects
+  //Functional composition of effects
   def program[M[_]: Monad](getUserF: Long ⇒ M[User],
                            getUserAddressF: User ⇒ M[Address],
                            logF: String ⇒ M[Unit])(id: Long)(implicit t: ClassTag[M[_]]): M[Address] = {
@@ -65,7 +65,6 @@ class GenericEffects extends Specification {
       _ ← logF(s"[${t.runtimeClass.getName}] fetch address $address for user $user")
     } yield address
   }
-
 
   "Id monad effect" in {
     val getUserF: Long ⇒ Id[User] = id ⇒ User(id, "Sherlock")
@@ -96,9 +95,9 @@ class GenericEffects extends Specification {
   "Concurrency effect with Task" in {
     val getUserF: Long ⇒ Task[User] = id ⇒ Task.now(User(id, "Sherlock"))
     val getAddressF: User ⇒ Task[Address] = id ⇒ Task.now(Address())
-    val logF: String ⇒ Task[Unit] = r ⇒ Task(logger.info(r))
+    val logF: String ⇒ Task[Unit] = r ⇒ Task.now(logger.info(r))
 
-    (program[Task](getUserF, getAddressF, logF)(99l)).run should be equalTo Address()
+    program[Task](getUserF, getAddressF, logF)(99l).run should be equalTo Address()
   }
 
   "Scalar or Vector response with monifu.Observable" in {
@@ -121,10 +120,10 @@ class GenericEffects extends Specification {
     val getAddressByUser: User ⇒ Observable[Address] = u ⇒ Observable.fromIterable(seq).subscribeOn(P)
     val logF: String ⇒ Observable[Unit] = r ⇒ Observable.unit(logger.info(r))
 
-    (program[Observable](getUserF, getAddressByUser, logF)(261l))
+    program[Observable](getUserF, getAddressByUser, logF)(261l)
       .subscribe(new Observer[Address] {
         def onNext(elem: Address) = Future {
-          logF(s": Observer consume $elem")
+          logF(s"Observer consumed $elem")
           val results = register.transactAndGet { elem :: _ }
           if (results.size == 4) {
             latch.countDown()
@@ -151,7 +150,8 @@ class GenericEffects extends Specification {
     val register = new AtomicRegister(List[Address]())
     val latch = new CountDownLatch(1)
 
-    val logF: String ⇒ RxObservable[Unit] = r ⇒ RxObservable.just(logger.info(r))
+    val logF: String ⇒ RxObservable[Unit] =
+      r ⇒ RxObservable.just(logger.info(r))
 
     val getUserById: Long ⇒ RxObservable[User] =
       id ⇒ RxObservable.defer {
@@ -170,7 +170,7 @@ class GenericEffects extends Specification {
       override def bind[A, B](fa: RxObservable[A])(f: (A) ⇒ RxObservable[B]): RxObservable[B] = fa flatMap f
     }
 
-    (program[RxObservable](getUserById, getAddressByUser, logF)(99l))
+    program[RxObservable](getUserById, getAddressByUser, logF)(99l)
       .observeOn(rx.lang.scala.schedulers.ComputationScheduler())
       .materialize.subscribe { n ⇒
         n match {
@@ -254,7 +254,8 @@ class GenericEffects extends Specification {
         a.set(Map("address" -> a.street))
       }
 
-    val logF: String ⇒ W[Unit] = r ⇒ logger.info(r).point[W]
+    val logF: String ⇒ W[Unit] =
+      r ⇒ logger.info(r).point[W]
 
     val rMap = program[W](getUserF, getAddressF, logF)(id).run._1
     //val rMap = program[({ type λ[x] = Writer[Map[String, String], x] })#λ](getUserF, getAddressF, logF)(id).run._1

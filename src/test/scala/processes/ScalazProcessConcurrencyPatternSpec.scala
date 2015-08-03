@@ -73,7 +73,7 @@ class ScalazProcessConcurrencyPatternSpec extends Specification {
 
       def resource(url: Int): Process[Task, Int] = P.eval(Task {
         Thread.sleep(ThreadLocalRandom.current().nextInt(100, 200)) // simulate blocking call
-        logger.info(s"${Thread.currentThread.getName} - Get $url")
+        logger.info(s"Get $url")
         url
       }(ioExecutor))
 
@@ -82,7 +82,7 @@ class ScalazProcessConcurrencyPatternSpec extends Specification {
 
       merge.mergeN(source)(fanOutS).fold(0) { (a, b) ⇒
         val r = a + b
-        logger.info(s"${Thread.currentThread.getName} - current sum: $r")
+        logger.info(s"Current sum: $r")
         r
       }.runLog.runAsync(sync.put)
 
@@ -122,12 +122,14 @@ class ScalazProcessConcurrencyPatternSpec extends Specification {
         }
 
       val out: IndexedSeq[Map[String, Int]] =
-        (qWriter.drain merge scalaz.stream.merge.mergeN(mSize)(mappers)(S).foldMonoid).runLog.run
+        (qWriter.drain merge scalaz.stream.merge.mergeN(mSize)(mappers)(S)
+          .foldMonoid)
+          .runLog.run
 
       out.size === 1
-      out(0)("B") === 10
-      out(0)("C") === 9
-      out(0)("A") === 5
+      out.head("B") === 10
+      out.head("C") === 9
+      out.head("A") === 5
     }
   }
 
@@ -153,7 +155,8 @@ class ScalazProcessConcurrencyPatternSpec extends Specification {
       implicit val S = Strategy.Executor(E)
 
       val source = P.emitAll(1 to 35)
-      val latch = new CountDownLatch(1)
+      val sync = new SyncVar[Throwable \/ Unit]()
+
       val p = for {
         outs ← broadcastN(3, source)
 
@@ -188,11 +191,14 @@ class ScalazProcessConcurrencyPatternSpec extends Specification {
           })
         }).map(r ⇒ logger.info(s"${r._2} consumer_2 ${r._1}"))
 
-        _ ← ((consumer0 merge consumer1) merge consumer2)
+        _ ← (consumer0 merge consumer1) merge consumer2
       } yield ()
 
-      p.onComplete(P.eval(Task.delay { logger.info("Consumers have done"); latch.countDown() })).run.runAsync(_ ⇒ ())
-      latch.await
+      p.onComplete(P.eval(Task.delay { logger.info("Consumers have done") }))
+        .run
+        .runAsync(sync.put)
+
+      sync.get
       1 === 1
     }
   }
@@ -259,7 +265,7 @@ class ScalazProcessConcurrencyPatternSpec extends Specification {
   "Exchange" should {
     "have transferred from InSystem to OutSystem" in {
       val Size = 60
-      val I = Strategy.Executor(newFixedThreadPool(3, new NamedThreadFactory("exchange-worker")))
+      val I = Strategy.Executor(newFixedThreadPool(4, new NamedThreadFactory("exchange-worker")))
       //values read from remote system
       val InSystem = async.unboundedQueue[Int](I)
       val OutSystem = async.unboundedQueue[Int](I)
@@ -276,7 +282,7 @@ class ScalazProcessConcurrencyPatternSpec extends Specification {
 
       val buffer = OutSystem.dequeueAvailable.runLog.run(0)
       buffer.size === Size
-      buffer.reduce(_ + _) === (1 to Size).map(_ * 2).reduce(_ + _)
+      buffer.sum === (1 to Size).map(_ * 2).sum
     }
   }
 }
