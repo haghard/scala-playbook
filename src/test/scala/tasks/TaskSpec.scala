@@ -96,6 +96,8 @@ class TaskSpec extends FlatSpec with org.scalatest.Matchers {
     import common.KleisliSupport._
     //This is how we can get a computation to run on precisely the pool,
     //without having to constantly pass around the explicit reference to the target pool
+    val r0 = new SyncVar[Throwable \/ String]
+    val r1 = new SyncVar[Throwable \/ String]
 
     val executorIO = Executors.newFixedThreadPool(2, new NamedThreadFactory("io-worker"))
     val executorCPU = Executors.newFixedThreadPool(2, new NamedThreadFactory("cpu-worker"))
@@ -122,9 +124,6 @@ class TaskSpec extends FlatSpec with org.scalatest.Matchers {
 
     val result0 = flow run executorIO
     val result1 = flow run executorCPU
-
-    val r0 = new SyncVar[Throwable \/ String]
-    val r1 = new SyncVar[Throwable \/ String]
 
     result0.runAsync(r0.put)
     result1.runAsync(r1.put)

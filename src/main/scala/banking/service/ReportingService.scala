@@ -20,5 +20,5 @@ trait ReportingService[Amount] {
    *
    * @return
    */
-  def balancesP: Reader[AccountRepo, Process[Task, Valid[Seq[(String, Amount)]]]]
+  def balancesProcess: Reader[AccountRepo, Process[Task, Valid[Seq[(String, Amount)]]]]
 }

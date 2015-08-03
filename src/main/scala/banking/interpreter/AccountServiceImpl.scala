@@ -50,7 +50,8 @@ trait AccountServiceImpl extends AccountService[Account, Amount, Balance] {
    * @param amount
    * @return
    */
-  override def debit(no: String, amount: Amount): AccountOperation[Account] = modify(no, amount, D)
+  override def debit(no: String, amount: Amount): AccountOperation[Account] =
+    modify(no, amount, D)
 
   /**
    *
@@ -58,7 +59,8 @@ trait AccountServiceImpl extends AccountService[Account, Amount, Balance] {
    * @param amount
    * @return
    */
-  override def credit(no: String, amount: Amount): AccountOperation[Account] = modify(no, amount, C)
+  override def credit(no: String, amount: Amount): AccountOperation[Account] =
+    modify(no, amount, C)
 
   /**
    *

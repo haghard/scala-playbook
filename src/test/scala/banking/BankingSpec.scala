@@ -21,17 +21,17 @@ class BankingSpec extends Specification {
       d ← debit(a.no, db)
     } yield d
 
-  def openA() =
+  def open2(): Kleisli[Valid, AccountRepo, (Balance, Balance)] =
     for {
-      _ ← open("3445684569463567", "Alan Turing", None, None, Checking)
-      _ ← open("3463568456374573", "Nikola Tesla", BigDecimal(456.9).some, None, Savings)
-    } yield ()
+      a0 ← open("3445684569463567", "Alan Turing", None, None, Checking)
+      a1 ← open("3463568456374573", "Nikola Tesla", BigDecimal(456.9).some, None, Savings)
+    } yield (a0.balance, a1.balance)
 
-  def creditA() =
+  def credit2(): Kleisli[Valid, AccountRepo, (String, String)] =
     for {
-      _ ← credit("3445684569463567", 5000)
-      _ ← credit("3463568456374573", 6000)
-    } yield ()
+      a0 ← credit("3445684569463567", 5000)
+      a1 ← credit("3463568456374573", 6000)
+    } yield (a0.no, a1.no)
 
   trait AccountRepositoryInMemory extends AccountRepo {
     lazy val repo = scala.collection.mutable.Map.empty[String, Account]
@@ -56,12 +56,13 @@ class BankingSpec extends Specification {
   "Open, credit, transfer, balances" should {
     "run" in {
       val program = for {
-        _ ← openA()
-        _ ← creditA()
+        _ ← open2()
+        nums ← credit2()
         //a <- balance("a34vzbdfg")
         //b <- balance("a34vzbdfg")
         //_ ← balances
-        _ ← transfer("3463568456374573", "3445684569463567", BigDecimal(1000))
+        _ = println(nums._1 + " - " + nums._2)
+        _ ← transfer(nums._1, nums._2, BigDecimal(1000))
         c ← balances
       } yield c
 
@@ -71,6 +72,18 @@ class BankingSpec extends Specification {
       val seq = r.toOption.get
       seq.foreach(println(_))
       seq.size === 2
+    }
+  }
+
+  "Balances" should {
+    "have streamed through process api" in {
+      val Repo = AccountRepositoryFromMap
+      val program = for { _ ← open2() } yield ()
+
+      program(Repo)
+      val res: Valid[Seq[(String, Amount)]] = balancesProcess.run(Repo).runLog.run(0)
+      res.isSuccess === true
+      res.toOption.get.size == 2
     }
   }
 }

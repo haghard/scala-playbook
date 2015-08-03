@@ -13,7 +13,7 @@ object KleisliSupport {
   def delegate: Delegated[ExecutorService] = Kleisli.kleisli(e ⇒ Task.now(e))
   def reader: Reader[ExecutorService] = Kleisli.kleisli(e ⇒ Task.now(e))
 
-  implicit class KleisliTask[T](val task: Task[T]) {
+  implicit class KleisliTask[T](val task: Task[T]) extends AnyVal {
     def kleisli: Delegated[T] = Kleisli.kleisli(_ ⇒ task)
     def kleisliR: Reader[T] = Kleisli.kleisli(_ ⇒ task)
   }

@@ -56,9 +56,9 @@ class ComposableEffects extends Specification {
       }
   }*/
   //Functional composition of effects
-  def program[M[_]: Monad](getUserF: Long ⇒ M[User],
-                           getUserAddressF: User ⇒ M[Address],
-                           logF: String ⇒ M[Unit])(id: Long)(implicit t: ClassTag[M[_]]): M[Address] = {
+  def flow[M[_]: Monad](getUserF: Long ⇒ M[User],
+                        getUserAddressF: User ⇒ M[Address],
+                        logF: String ⇒ M[Unit])(id: Long)(implicit t: ClassTag[M[_]]): M[Address] = {
     for {
       user ← getUserF(id)
       address ← getUserAddressF(user)
@@ -71,7 +71,7 @@ class ComposableEffects extends Specification {
     val getAddressF: User ⇒ Id[Address] = user ⇒ Address()
     val logF: String ⇒ Id[Unit] = r ⇒ logger.info(r)
 
-    program[Id](getUserF, getAddressF, logF)(99l) should be equalTo Address()
+    flow[Id](getUserF, getAddressF, logF)(99l) should be equalTo Address()
   }
 
   "Absent/Present value effect with Option" in {
@@ -79,7 +79,7 @@ class ComposableEffects extends Specification {
     val getAddressF: User ⇒ Option[Address] = user ⇒ Some(Address())
     val logF: String ⇒ Option[Unit] = r ⇒ Option(logger.info(r))
 
-    program[Option](getUserF, getAddressF, logF)(99l) should be equalTo Some(Address())
+    flow[Option](getUserF, getAddressF, logF)(99l) should be equalTo Some(Address())
   }
 
   "Latency effect with Future" in {
@@ -88,7 +88,7 @@ class ComposableEffects extends Specification {
     val logF: String ⇒ Future[Unit] = r ⇒ Future(logger.info(r))
 
     import scala.concurrent.Await
-    Await.result(program[Future](getUserF, getAddressF, logF)(99l),
+    Await.result(flow[Future](getUserF, getAddressF, logF)(99l),
       new FiniteDuration(1, TimeUnit.SECONDS)) should be equalTo Address()
   }
 
@@ -97,7 +97,7 @@ class ComposableEffects extends Specification {
     val getAddressF: User ⇒ Task[Address] = id ⇒ Task.now(Address())
     val logF: String ⇒ Task[Unit] = r ⇒ Task.now(logger.info(r))
 
-    program[Task](getUserF, getAddressF, logF)(99l).run should be equalTo Address()
+    flow[Task](getUserF, getAddressF, logF)(99l).run should be equalTo Address()
   }
 
   "Scalar or Vector response with monifu.Observable" in {
@@ -120,7 +120,7 @@ class ComposableEffects extends Specification {
     val getAddressByUser: User ⇒ Observable[Address] = u ⇒ Observable.fromIterable(seq).subscribeOn(P)
     val logF: String ⇒ Observable[Unit] = r ⇒ Observable.unit(logger.info(r))
 
-    program[Observable](getUserF, getAddressByUser, logF)(261l)
+    flow[Observable](getUserF, getAddressByUser, logF)(261l)
       .subscribe(new Observer[Address] {
         def onNext(elem: Address) = Future {
           logF(s"Observer consumed $elem")
@@ -170,7 +170,7 @@ class ComposableEffects extends Specification {
       override def bind[A, B](fa: RxObservable[A])(f: (A) ⇒ RxObservable[B]): RxObservable[B] = fa flatMap f
     }
 
-    program[RxObservable](getUserById, getAddressByUser, logF)(99l)
+    flow[RxObservable](getUserById, getAddressByUser, logF)(99l)
       .observeOn(rx.lang.scala.schedulers.ComputationScheduler())
       .materialize.subscribe { n ⇒
         n match {
@@ -188,6 +188,8 @@ class ComposableEffects extends Specification {
 
   "Scalar or Vector response with scalaz.Process" in {
     import scalaz.stream.Process
+
+    type PTask[X] = Process[Task, X]
 
     val seq = (1 to 100).toSeq
     val buf = Buffer.empty[Address]
@@ -230,9 +232,10 @@ class ComposableEffects extends Specification {
     val logF: String ⇒ Process[Task, Unit] =
       r ⇒ P.eval(Task.delay(logger.info(r)))
 
-    val Prog = program[({ type λ[x] = Process[Task, x] })#λ](getUserF, getUserAddressF, logF)(99l)
+    val prog = flow[PTask](getUserF, getUserAddressF, logF)(99l)
+    //val Prog = flow[({ type λ[x] = Process[Task, x] })#λ](getUserF, getUserAddressF, logF)(99l)
 
-    val r = (Prog to io.fillBuffer(buf)).run.attemptRun
+    val r = (prog to io.fillBuffer(buf)).run.attemptRun
 
     r should be equalTo \/-(())
     seq.size should be equalTo buf.size
@@ -257,7 +260,7 @@ class ComposableEffects extends Specification {
     val logF: String ⇒ W[Unit] =
       r ⇒ logger.info(r).point[W]
 
-    val rMap = program[W](getUserF, getAddressF, logF)(id).run._1
+    val rMap = flow[W](getUserF, getAddressF, logF)(id).run._1
     //val rMap = program[({ type λ[x] = Writer[Map[String, String], x] })#λ](getUserF, getAddressF, logF)(id).run._1
 
     rMap.get(id.toString) should be equalTo Some("Sherlock")

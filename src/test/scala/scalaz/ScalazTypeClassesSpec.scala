@@ -44,9 +44,9 @@ class ScalazTypeClassesSpec extends Specification {
   }
 
   "Functor" should {
-    "run" in {
-      import ScalazTypeClassesSpec._
+    import ScalazTypeClassesSpec._
 
+    "digit compose with Functor" in {
       "hello".some.map(_.length).get === 5
 
       67.plus(10.some) === Some(77)
@@ -54,6 +54,11 @@ class ScalazTypeClassesSpec extends Specification {
 
       67.plusM(10.some) === Some(77)
       1.minisM(List(7, 2)) === List(6, 1)
+    }
+
+    "Functors composition" in {
+      val F = Functor[List] compose Functor[Option]
+      F.map(List(Some(1), None, Some(2)))(_ + 1) === List(Some(2), None, Some(3))
     }
   }
 
