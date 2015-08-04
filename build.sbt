@@ -46,7 +46,7 @@ resolvers += "patriknw at bintray" at "http://dl.bintray.com/patriknw/maven"
 //"org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5.2" exclude ("org.specs2", "*"),
 libraryDependencies ++= Seq(
     "org.mongodb"         %  "mongo-java-driver"   %  "3.0.2"  withSources(),
-    "org.scalaz.stream"   %% "scalaz-stream"       %  "0.7.1a"    withSources(),
+    "org.scalaz.stream"   %% "scalaz-stream"       %  "0.7.2a"    withSources(),
     "com.typesafe.akka"   %% "akka-actor"          %    Akka      withSources(),
     "com.typesafe.akka"   %% "akka-testkit"        %    Akka,
     "com.typesafe.akka"   %% "akka-stream-experimental" % "1.0",

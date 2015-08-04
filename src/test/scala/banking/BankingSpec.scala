@@ -7,19 +7,12 @@ import org.specs2.mutable.Specification
 import scalaz._
 import Scalaz._
 import Kleisli._
+import scalaz.concurrent.Task
 
 class BankingSpec extends Specification {
-
   import banking.account._
-
   import banking.interpreter.AccountService._
   import banking.interpreter.ReportingService._
-
-  def transaction(a: Account, cr: Amount, db: Amount) =
-    for {
-      _ ← credit(a.no, cr)
-      d ← debit(a.no, db)
-    } yield d
 
   def open2(): Kleisli[Valid, AccountRepo, (Balance, Balance)] =
     for {
