@@ -4,21 +4,21 @@ import java.util.concurrent.Executors._
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{ ThreadFactory, Executors, CountDownLatch, TimeUnit }
 
-import mongo.MongoProgram.NamedThreadFactory
-import monifu.reactive.Ack.{ Cancel, Continue }
+import scalaz.Scalaz._
+import scalaz.stream.io
+import scala.reflect.ClassTag
 import org.apache.log4j.Logger
-import org.specs2.mutable.Specification
-import rx.lang.scala.schedulers.NewThreadScheduler
+import scalaz.stream.Process._
+import scala.language.higherKinds
 import scala.collection.mutable.Buffer
+import org.specs2.mutable.Specification
+import mongo.MongoProgram.NamedThreadFactory
+import scala.concurrent.duration.FiniteDuration
+import monifu.reactive.Ack.{ Cancel, Continue }
+import rx.lang.scala.schedulers.NewThreadScheduler
 import scala.concurrent.forkjoin.ThreadLocalRandom
 import scala.concurrent.{ ExecutionContext, Future }
-import scala.concurrent.duration.FiniteDuration
-import scala.reflect.ClassTag
-import scalaz.Scalaz._
 import scalaz.concurrent.{ Strategy, Task }
-import scala.language.higherKinds
-import scalaz.stream.Process._
-import scalaz.stream.io
 import java.util.concurrent.atomic.{ AtomicReference ⇒ JavaAtomicReference }
 
 class ComposableEffects extends Specification {
@@ -26,8 +26,7 @@ class ComposableEffects extends Specification {
   val logger = Logger.getLogger("effects")
 
   final class AtomicRegister[A](init: A) extends JavaAtomicReference[A](init) {
-    @annotation.tailrec
-    def attempt(f: A ⇒ A): A = {
+    @annotation.tailrec def attempt(f: A ⇒ A): A = {
       val current = get
       val updated = f(current)
       if (compareAndSet(current, updated)) updated else attempt(f)

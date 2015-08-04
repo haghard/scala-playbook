@@ -150,10 +150,9 @@ package object mongo3 {
     import Kleisli._
     type Transformation[M[_]] = MongoIO ~> ({ type λ[x] = Kleisli[M, MongoClient, x] })#λ
 
-    def transM[M[_]: scalaz.Monad: MongoAction](implicit ex: ExecutorService): Kleisli[M, MongoClient, A] = {
-      //val m = implicitly[scalaz.Monad[M]] creates Monad[Task], Monad[Observer], Monad[IO], Monad[Process]
+    //val m = implicitly[scalaz.Monad[M]] creates Monad[Task], Monad[Observer], Monad[IO], Monad[Process]
+    def transM[M[_]: scalaz.Monad: MongoAction](implicit ex: ExecutorService): Kleisli[M, MongoClient, A] =
       runFC[MongoIO, ({ type λ[x] = Kleisli[M, MongoClient, x] })#λ, A](q)(transformation[M])
-    }
 
     private def transformation[M[_]: scalaz.Monad: MongoAction](implicit ex: ExecutorService) =
       new Transformation[M] {

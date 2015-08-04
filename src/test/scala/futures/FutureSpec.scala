@@ -8,6 +8,7 @@ import org.specs2.mutable.Specification
 
 import scala.concurrent._
 import java.util.concurrent.atomic.AtomicReference
+import scala.concurrent.duration.FiniteDuration
 import scala.util.{ Failure, Success }
 
 class FutureSpec extends Specification {
@@ -113,6 +114,89 @@ class FutureSpec extends Specification {
 
       latch.await(5, TimeUnit.SECONDS) === true
       wasInterrupted === false
+    }
+  }
+
+
+  //Examples from  Learning Concurrent Programming in Scala
+  type Cancellable[T] = (Promise[Unit], Future[T])
+  def cancellable[T](b: Future[Unit] ⇒ T): Cancellable[T] = {
+    val cancel = Promise[Unit]
+    val f = Future {
+      val r = b(cancel.future)
+      if (!cancel.tryFailure(new Exception))
+        throw new CancellationException
+      r
+    }
+    (cancel, f)
+  }
+
+  "Cancellable" should {
+    "have run" in {
+      val (cancel, value) = cancellable { cancel ⇒
+        var i = 0
+        //poll 5 second for cancel
+        while (i < 10) {
+          if (cancel.isCompleted) throw new CancellationException
+          Thread.sleep(500)
+          println(s"$i: working")
+          i += 1
+        }
+        "resulting value"
+      }
+
+      Thread.sleep(3000)
+      //Thread.sleep(6000) > 5
+      //b === false
+
+      value.map(_ + "0").onComplete { _ ⇒ println("Eventually completed") }
+
+      //If the promise has already been completed returns `false`, or `true` otherwise.
+      val b = cancel.trySuccess()
+      println("canceled " + b)
+      b === true
+    }
+  }
+
+  implicit class FutureOps[T](val self: Future[T]) {
+    def or(that: Future[T]): Future[T] = {
+      val p = Promise[T]
+      self.onComplete { case x ⇒ p tryComplete x }
+      that.onComplete { case y ⇒ p tryComplete y }
+      p.future
+    }
+  }
+
+  def timeout(t: Long): Future[Unit] = {
+    import java.util._
+    val timer = new Timer(true)
+    val p = Promise[Unit]()
+    timer.schedule(new TimerTask {
+      override def run() = {
+        p success ()
+        timer.cancel()
+      }
+    }, t)
+    p.future
+  }
+
+  "The nondeterminism of the future's or combinator" should {
+    "have run" in {
+      val EC = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(2))
+      val time = new FiniteDuration(2, TimeUnit.SECONDS)
+      //A future computation cannot be forcefully stopped
+      val timeoutF = timeout(1000).map(_ ⇒ "timeout") or Future {
+        Thread.sleep(1200)
+        "completed"
+      }(EC)
+
+      val completedF = timeout(1000).map(_ ⇒ "timeout") or Future {
+        Thread.sleep(800)
+        "completed"
+      }(EC)
+
+      Await.result(timeoutF, time) === "timeout"
+      Await.result(completedF, time) === "completed"
     }
   }
 
