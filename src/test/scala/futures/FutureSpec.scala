@@ -117,7 +117,6 @@ class FutureSpec extends Specification {
     }
   }
 
-
   //Examples from  Learning Concurrent Programming in Scala
   type Cancellable[T] = (Promise[Unit], Future[T])
   def cancellable[T](b: Future[Unit] ⇒ T): Cancellable[T] = {
