@@ -60,6 +60,7 @@ package object mongo3 {
                 subscriber.onError(e)
                 None
             }).get
+
             subscriber.setProducer(n ⇒ {
               var i = 0
               val c = cursor

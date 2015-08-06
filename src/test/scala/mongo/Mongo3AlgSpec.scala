@@ -176,14 +176,12 @@ class Mongo3AlgSpec extends Specification {
     (0 until Size).foreach(i ⇒ insert(i).transM[Task].run(client).run)
 
     val latch = new CountDownLatch(1)
-    val received = new AtomicInteger()
+    val counter = new AtomicLong(0)
     val s = new rx.lang.scala.Subscriber[DBObject] {
       val batchSize = 7
-      val counter = new AtomicLong(0)
       override def onStart() = request(batchSize)
       override def onNext(n: DBObject) = {
         logger.info(s"$n")
-        received.incrementAndGet()
         if (counter.incrementAndGet() % batchSize == 0) {
           logger.info(s"★ ★ ★ ★ ★ ★   Page:[$batchSize]  ★ ★ ★ ★ ★ ★ ")
           request(batchSize)
@@ -199,7 +197,7 @@ class Mongo3AlgSpec extends Specification {
       .subscribe(s)
 
     latch.await()
-    received.get() === Size
+    counter.get() === Size
     client.close()
     server.shutdownNow
   }
