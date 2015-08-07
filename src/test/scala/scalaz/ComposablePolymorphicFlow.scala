@@ -20,9 +20,9 @@ import scala.concurrent.{ ExecutionContext, Future }
 import scalaz.concurrent.{ Strategy, Task }
 import java.util.concurrent.atomic.{ AtomicReference ⇒ JavaAtomicReference }
 
-class ComposablePolymorphicEffects extends Specification {
+class ComposablePolymorphicFlow extends Specification {
   val P = scalaz.stream.Process
-  val logger = Logger.getLogger("effects")
+  val logger = Logger.getLogger("flow")
 
   final class AtomicRegister[A](init: A) extends JavaAtomicReference[A](init) {
     @annotation.tailrec def attempt(f: A ⇒ A): A = {
@@ -252,11 +252,6 @@ class ComposablePolymorphicEffects extends Specification {
         user ⇒
           scalaz.stream.merge.mergeN(parLevel)(source(user.ids))(Strategy.Executor(ioE))
 
-      implicit def addressMonoid: Monoid[List[Address]] = new Monoid[List[Address]] {
-        override def zero: List[Address] = Nil
-        override def append(f1: List[Address], f2: ⇒ List[Address]): List[Address] = f1 ::: f2
-      }
-
       val buf = Buffer.empty[Address]
       val prog = flow[PTask](getUserF, getUserAddressF, logF)(99l)
       val f = (prog observe LoggerS to io.fillBuffer(buf)).run.attemptRun
@@ -281,7 +276,7 @@ class ComposablePolymorphicEffects extends Specification {
 
       def addresses(i: Int): Process[Task, Address] =
         P.eval(Task {
-          Thread.sleep(ThreadLocalRandom.current().nextInt(100, 200)) // simulate blocking call
+          Thread.sleep(ThreadLocalRandom.current().nextInt(100, 200)) // simulate remote call
           Address("Baker street " + i)
         }(ioE))
 
