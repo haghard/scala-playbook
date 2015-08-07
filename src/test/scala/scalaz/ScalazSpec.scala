@@ -5,7 +5,7 @@ import Scalaz._
 import scala.language.higherKinds
 import org.specs2.mutable.Specification
 
-object ScalazTypeClassesSpec {
+object ScalazSpec {
 
   implicit class NumericAlgebraOps[T](val v: T) extends AnyVal {
 
@@ -29,7 +29,7 @@ object ScalazTypeClassesSpec {
   }
 }
 
-class ScalazTypeClassesSpec extends Specification {
+class ScalazSpec extends Specification {
 
   "Equal" should {
     "run" in {
@@ -44,7 +44,7 @@ class ScalazTypeClassesSpec extends Specification {
   }
 
   "Functor" should {
-    import ScalazTypeClassesSpec._
+    import ScalazSpec._
 
     "digit compose with Functor" in {
       "hello".some.map(_.length).get === 5
@@ -76,6 +76,10 @@ class ScalazTypeClassesSpec extends Specification {
     "Semigroup ops" in {
       1 |+| 2 |+| 6 should be equalTo 9
       "Hello".some |+| None |+| "World".some should be equalTo "HelloWorld".some
+    }
+
+    "Semigroup(Monoid) and ApplicativeBuilder relations" in {
+      (1.some |+| 2.some) === ((1.some |@| 2.some)(_ + _))
     }
   }
 
