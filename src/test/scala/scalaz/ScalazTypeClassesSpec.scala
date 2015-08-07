@@ -202,7 +202,6 @@ class ScalazTypeClassesSpec extends Specification {
     "TraverseUsage" should {
 
       "sequence" in {
-        List(1.some, 2.some).sequence === Some(List(1, 2))
         //given a Traverse[F] and Applicative[G] turns F[G[A]] into G[F[A]]
         val list: List[Option[Int]] = List(1.some, 2.some, 3.some, 4.some)
         Traverse[List].sequence(list) === Some(List(1, 2, 3, 4))
