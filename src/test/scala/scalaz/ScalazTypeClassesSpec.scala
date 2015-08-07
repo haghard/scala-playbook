@@ -199,12 +199,39 @@ class ScalazTypeClassesSpec extends Specification {
       wrapM[Option](1) === Some(1)
     }
 
-    "Sequence" in {
-      List(1.some, 2.some).sequence === Some(List(1, 2))
-    }
+    "TraverseUsage" should {
 
-    "Traverse" in {
-      List(1.some, 2.some).traverse(_.map(_ * 2)) === Some(List(2, 4))
+      "sequence" in {
+        List(1.some, 2.some).sequence === Some(List(1, 2))
+        //given a Traverse[F] and Applicative[G] turns F[G[A]] into G[F[A]]
+        val list: List[Option[Int]] = List(1.some, 2.some, 3.some, 4.some)
+        Traverse[List].sequence(list) === Some(List(1, 2, 3, 4))
+
+        //In the case of the Option applicative, if any of the values are None the result of the entire computation is None
+        val list2: List[Option[Int]] = List(1.some, 2.some, scalaz.Scalaz.none[Int], 4.some)
+        Traverse[List].sequence(list2) === None
+      }
+
+      "traverse" in {
+        List(1.some, 2.some).traverse(_.map(_ * 2)) === Some(List(2, 4))
+      }
+
+      "sequence traverse relation" in {
+        val step: Int ⇒ Option[Int] = (x ⇒ if (x < 5) (x * 2).some else scalaz.Scalaz.none[Int])
+        val l = List(1, 2, 3, 4)
+        l.traverse(step) === l.map(step).sequence
+
+        //the entire computation is None
+        val l0 = l :+ 5
+        l0.traverse(step) === l0.map(step).sequence
+
+      }
+
+      "sequenceU for collect errors" in {
+        val validations: Vector[ValidationNel[String, Int]] = Vector(1.success, "failure2".failureNel, 3.success, "failure4".failureNel)
+        val result = validations.sequenceU
+        result === NonEmptyList("failure2", "failure4").failure[Vector[Int]]
+      }
     }
 
     "TraverseS" in {

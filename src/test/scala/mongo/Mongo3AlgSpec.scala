@@ -10,7 +10,7 @@ import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
 import de.bwaldvogel.mongo.backend.memory.MemoryBackend
-import java.util.concurrent.atomic.{ AtomicLong, AtomicInteger }
+import java.util.concurrent.atomic.AtomicLong
 
 import rx.lang.scala.Observable
 import rx.lang.scala.schedulers.ExecutionContextScheduler

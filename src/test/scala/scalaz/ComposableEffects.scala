@@ -58,20 +58,32 @@ class ComposableEffects extends Specification {
   def flow[M[_]: Monad](getUserF: Long ⇒ M[User],
                         getUserAddressF: User ⇒ M[Address],
                         logF: String ⇒ M[Unit])(id: Long)(implicit t: ClassTag[M[_]]): M[Address] = {
+    val cName = t.runtimeClass.getName
     for {
+      _ ← logF(s"1.[$cName] Searching user for id $id")
       user ← getUserF(id)
+      _ ← logF(s"2.[$cName] Searching address for user $user")
       address ← getUserAddressF(user)
-      _ ← logF(s"[${t.runtimeClass.getName}] fetch address $address for user $user")
+      //_ ← logF(s"[$cName] fetched address $address for user $user")
     } yield address
   }
 
-  "Id monad effect" in {
+  def kleisliFlow[M[_]: Monad](getUserF: Long ⇒ M[User],
+                               getUserAddressF: User ⇒ M[Address],
+                               logF: String ⇒ M[Unit])(implicit t: ClassTag[M[_]]): Kleisli[M, Long, Address] = {
+    import scalaz.Kleisli._
+    val cName = t.runtimeClass.getName
+    kleisli(getUserF.compose { id: Long ⇒ logger.info(s"1.[$cName] Searching user for id $id"); id }) >=>
+      kleisli(getUserAddressF.compose { u: User ⇒ logger.info(s"2.[$cName] Searching address for user $u"); u })
+  }
+
+  /*"Id monad effect" in {
     val getUserF: Long ⇒ Id[User] = id ⇒ User(id, "Sherlock")
     val getAddressF: User ⇒ Id[Address] = user ⇒ Address()
     val logF: String ⇒ Id[Unit] = r ⇒ logger.info(r)
 
     flow[Id](getUserF, getAddressF, logF)(99l) should be equalTo Address()
-  }
+  }*/
 
   "Absent/Present value effect with Option" in {
     val getUserF: Long ⇒ Option[User] = id ⇒ Option(User(id, "Sherlock"))
@@ -81,6 +93,15 @@ class ComposableEffects extends Specification {
     flow[Option](getUserF, getAddressF, logF)(99l) should be equalTo Some(Address())
   }
 
+  "Absent/Present value effect with Kleisli and Option" in {
+    val getUserF: Long ⇒ Option[User] = id ⇒ Option(User(id, "Sherlock"))
+    val getAddressF: User ⇒ Option[Address] = user ⇒ Some(Address())
+    val logF: String ⇒ Option[Unit] = r ⇒ Option(logger.info(r))
+
+    kleisliFlow[Option](getUserF, getAddressF, logF).run(99l) should be equalTo Some(Address())
+  }
+
+  /*
   "Latency effect with Future" in {
     val getUserF: Long ⇒ Future[User] = id ⇒ Future(User(id, "Sherlock"))
     val getAddressF: User ⇒ Future[Address] = id ⇒ Future(Address())
@@ -264,5 +285,5 @@ class ComposableEffects extends Specification {
 
     rMap.get(id.toString) should be equalTo Some("Sherlock")
     rMap.get("address") should be equalTo Some(Address().street)
-  }
+  }*/
 }
