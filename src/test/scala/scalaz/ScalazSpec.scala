@@ -5,6 +5,8 @@ import Scalaz._
 import scala.language.higherKinds
 import org.specs2.mutable.Specification
 
+import scalaz.concurrent.Task
+
 object ScalazSpec {
 
   implicit class NumericAlgebraOps[T](val v: T) extends AnyVal {
@@ -245,6 +247,54 @@ class ScalazSpec extends Specification {
       val ans = r.run(5)
       ans._1 === 10 //(1*5)*2
       ans._2 === List(1, 2)
+    }
+  }
+
+  "Free monad with Evaluator abstraction" should {
+
+    sealed trait Instruction[+T]
+    case class Tell(prompt: String) extends Instruction[String]
+    case class Ask(msg: String) extends Instruction[String]
+
+    trait Evaluator[F[_]] { self ⇒
+
+      def evaluate[T](given: F[T]): T
+
+      def ~>[G[_]: Monad]: (F ~> G) =
+        Evaluator.nat(self, scalaz.Monad[G])
+    }
+
+    object Evaluator {
+      def apply[F[_]: Evaluator] = implicitly[Evaluator[F]]
+
+      def nat[F[_], G[_], E <: Evaluator[F]](implicit E: E, G: Monad[G]) = new (F ~> G) {
+        override def apply[A](given: F[A]): G[A] =
+          G.pure(E.evaluate(given))
+      }
+    }
+
+    object EvaluatorLogic extends Evaluator[Instruction] {
+      override def evaluate[T](given: Instruction[T]): T = given match {
+        case Tell(text) ⇒ { println(text); "" }
+        case Ask(msg)   ⇒ s"${msg}99" //StdIn.readLine(m)
+      }
+    }
+
+    def tellMe = Free.liftFC(Tell("Please enter the size: "))
+    def askMe(m: String) = Free.liftFC(Ask(m))
+
+    "run" in {
+      val expected = "size:99"
+      val program = for {
+        d ← tellMe
+        size ← askMe("size:")
+      } yield size
+
+      val sId = Free.runFC(program)(EvaluatorLogic.~>[Id])
+      val sTask = Free.runFC(program)(EvaluatorLogic.~>[Task]).run
+
+      sId === expected
+      sTask === expected
     }
   }
 }
