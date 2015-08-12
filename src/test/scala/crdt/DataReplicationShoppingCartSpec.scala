@@ -52,7 +52,7 @@ class DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCart
 
       Writer.merge(
         replicas.dequeue.map {
-          ConvergableReplica[RType, String](_, input, replicator).task(collector) //run replicas in concurrent manner
+          Replica[RType, String](_, input, replicator).run(collector) //run replicas in concurrent manner
             .runAsync { _ ⇒ latch.countDown() }
         }
       )(R).run.run

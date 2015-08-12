@@ -50,7 +50,7 @@ class EventuateShoppingCartSpec extends Properties("ShoppingCart") {
 
     Writer.merge(
       replicas.dequeue.map { n ⇒
-        ConvergableReplica[RType, String](n, input, replicator).task(collector) //run replicas in concurrent manner
+        Replica[RType, String](n, input, replicator).run(collector) //run replicas in concurrent manner
           .runAsync { _ ⇒ latch.countDown() }
       }
     )(R).run.run

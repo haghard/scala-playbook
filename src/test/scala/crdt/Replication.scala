@@ -50,7 +50,7 @@ object Replication {
       } yield new String(Array(a, b, c))
     ))
 
-  trait ConvergableReplica[F[_], T] {
+  trait Replica[F[_], T] {
     protected val ADD = """add-(.+)""".r
     protected val DROP = """drop-(.+)""".r
 
@@ -58,7 +58,7 @@ object Replication {
     private var input: Queue[T] = null
     private var replicationChannel: Signal[F[T]] = null
 
-    private def create(n: Int, i: Queue[T], r: Signal[F[T]]): ConvergableReplica[F, T] = {
+    private def construct(n: Int, i: Queue[T], r: Signal[F[T]]): Replica[F, T] = {
       num = n
       input = i
       replicationChannel = r
@@ -69,7 +69,7 @@ object Replication {
 
     protected def elements(set: F[T]): Set[T]
 
-    def task(collector: TrieMap[Int, Set[T]]): Task[Unit] =
+    def run(collector: TrieMap[Int, Set[T]]): Task[Unit] =
       input.dequeue.flatMap { action ⇒
         //shouldn't be linearizable !!!!!!!!!!!!!!!!!!!!
         P.eval(replicationChannel.compareAndSet(c ⇒ Some(converge(action, c.get))))
@@ -79,13 +79,10 @@ object Replication {
         .run[Task]
   }
 
-  object ConvergableReplica {
+  object Replica {
 
-    def apply[F[_], T](n: Int, i: Queue[T], S: Strategy)(implicit replica: ConvergableReplica[F, T], zero: F[T]): ConvergableReplica[F, T] =
-      replica.create(n, i, async.signalOf[F[T]](zero)(S))
-
-    def apply[F[_], T](n: Int, i: Queue[T], rChannel: Signal[F[T]])(implicit replica: ConvergableReplica[F, T]): ConvergableReplica[F, T] =
-      replica.create(n, i, rChannel)
+    def apply[F[_], T](n: Int, i: Queue[T], rChannel: Signal[F[T]])(implicit replica: Replica[F, T]): Replica[F, T] =
+      replica.construct(n, i, rChannel)
 
     implicit def eventuateR = akka.contrib.datareplication.Replicas.eventuateReplica()
     implicit def akkaR = akka.contrib.datareplication.Replicas.akkaReplica()
