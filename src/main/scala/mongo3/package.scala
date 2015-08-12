@@ -105,8 +105,9 @@ package object mongo3 {
         }
       }
 
-    implicit def ProcessAction: MInstruction[({ type λ[x] = Process[Task, x] })#λ] =
-      new MInstruction[({ type λ[x] = Process[Task, x] })#λ] {
+    type TaskP[x] = Process[Task, x] //({ type λ[x] = Process[Task, x] })#λ
+    implicit def ProcessAction: MInstruction[TaskP] =
+      new MInstruction[TaskP] {
         override val logger = Logger.getLogger("Process-Producer")
         override def apply[A](a: ⇒ A) = Process.eval(Task(a))
 
@@ -147,44 +148,47 @@ package object mongo3 {
     override def bind[A, B](fa: Future[A])(f: (A) ⇒ Future[B]): Future[B] = fa.flatMap(f)
   }
 
-  implicit class MongoProgramsSyntax[A](val q: FreeMongoIO[A]) extends AnyVal {
+  implicit class MongoInstructionsSyntax[A](val q: FreeMongoIO[A]) extends AnyVal {
     import Kleisli._
     type Transformation[M[_]] = MongoIO ~> ({ type λ[x] = Kleisli[M, MongoClient, x] })#λ
+    type KleisliM[M[_], Out] = Kleisli[M, MongoClient, Out]
 
-    //val m = implicitly[scalaz.Monad[M]] creates Monad[Task], Monad[Observer], Monad[IO], Monad[Process]
+    //val m = implicitly[scalaz.Monad[M]] lookup
+    //Monad[Task] and MInstruction[Task]) or
+    //Monad[Observer] and MInstruction[Observer] or
+    //Monad[IO] and MInstruction[IO] or
+    //Monad[Process] and MInstruction[Process]
     def nat[M[_]: scalaz.Monad: MInstruction](implicit ex: ExecutorService): Kleisli[M, MongoClient, A] =
-      runFC[MongoIO, ({ type λ[x] = Kleisli[M, MongoClient, x] })#λ, A](q)(transformation[M])
+      runFC[MongoIO, ({ type λ[x] = Kleisli[M, MongoClient, x] })#λ, A](q)(evaluate[M](implicitly[MInstruction[M]].withExecutor(ex)))
 
-    private def transformation[M[_]: scalaz.Monad: MInstruction](implicit ex: ExecutorService) =
-      new Transformation[M] {
-        val actionInstance = implicitly[MInstruction[M]].withExecutor(ex)
-        val logger = actionInstance.logger()
+    private def evaluate[M[_]](evaluator: MInstruction[M]) = new Transformation[M] {
+      val logger = evaluator.logger()
 
-        private def toKleisli[A](f: MongoClient ⇒ A): Kleisli[M, MongoClient, A] =
-          kleisli(client ⇒ actionInstance(f(client)))
+      private def toKleisli[A](f: MongoClient ⇒ A): Kleisli[M, MongoClient, A] =
+        kleisli(client ⇒ evaluator(f(client)))
 
-        override def apply[A](fa: MongoIO[A]): Kleisli[M, MongoClient, A] = fa match {
-          case FindOne(db, c, q) ⇒ toKleisli { client ⇒
-            val coll = client.getDB(db).getCollection(c)
-            val r = coll.findOne(q)
-            logger.info(s"Find-One: $r")
-            new BasicDBObject("rs", r).asInstanceOf[A]
-          }
-          case Insert(db, c, insert) ⇒ toKleisli { client ⇒
-            Try {
-              val coll = client.getDB(db).getCollection(c)
-              coll.insert(WriteConcern.ACKNOWLEDGED, insert)
-              logger.info(s"Insert: $insert")
-              insert
-            } match {
-              case Success(obj)   ⇒ obj.asInstanceOf[A]
-              case Failure(error) ⇒ throw new MongoException(s"Failed to insert in $c object: ${insert}", error)
-            }
-          }
-          //batching or streaming
-          case Find(db, c, q) ⇒ kleisli(client ⇒ actionInstance.effect(client, db, c, q))
+      override def apply[A](fa: MongoIO[A]): Kleisli[M, MongoClient, A] = fa match {
+        case FindOne(db, c, q) ⇒ toKleisli { client ⇒
+          val coll = client.getDB(db).getCollection(c)
+          val r = coll.findOne(q)
+          logger.info(s"Find-One: $r")
+          new BasicDBObject("rs", r).asInstanceOf[A]
         }
+        case Insert(db, c, insert) ⇒ toKleisli { client ⇒
+          Try {
+            val coll = client.getDB(db).getCollection(c)
+            coll.insert(WriteConcern.ACKNOWLEDGED, insert)
+            logger.info(s"Insert: $insert")
+            insert
+          } match {
+            case Success(obj)   ⇒ obj.asInstanceOf[A]
+            case Failure(error) ⇒ throw new MongoException(s"Failed to insert in $c object: ${insert}", error)
+          }
+        }
+        //batching or streaming
+        case Find(db, c, q) ⇒ kleisli(client ⇒ evaluator.effect(client, db, c, q))
       }
+    }
   }
 
   trait MongoInstructions {

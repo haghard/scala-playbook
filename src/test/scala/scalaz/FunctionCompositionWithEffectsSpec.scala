@@ -20,7 +20,7 @@ import scala.concurrent.{ ExecutionContext, Future }
 import scalaz.concurrent.{ Strategy, Task }
 import java.util.concurrent.atomic.{ AtomicReference ⇒ JavaAtomicReference }
 
-class AbstractEffectFlowSpec extends Specification {
+class FunctionCompositionWithEffectsSpec extends Specification {
   val P = scalaz.stream.Process
   val logger = Logger.getLogger("flow")
 

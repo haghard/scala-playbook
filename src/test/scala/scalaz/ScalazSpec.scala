@@ -81,7 +81,7 @@ class ScalazSpec extends Specification {
     }
 
     "Semigroup(Monoid) and ApplicativeBuilder relations" in {
-      (1.some |+| 2.some) === ((1.some |@| 2.some)(_ + _))
+      (1.some |+| 2.some) === (1.some |@| 2.some)(_ + _)
     }
   }
 
@@ -187,7 +187,7 @@ class ScalazSpec extends Specification {
       def wrap[F[_]] = new WrapHelper[F]
 
       import scala.language.reflectiveCalls
-      def wrapS[F[_]] = new {
+      def wrapA[F[_]] = new {
         def apply[A](a: A)(implicit ev: Applicative[F]): F[A] =
           ev.point(a)
       }
@@ -199,10 +199,13 @@ class ScalazSpec extends Specification {
 
       wrap[List](1) === List(1)
       wrap[Option](1) === Some(1)
-      wrapS[List](1) === List(1)
-      wrapS[Option](1) === Some(1)
+
+      wrapA[List](1) === List(1)
+      wrapA[Option](1) === Some(1)
+
       wrapM[List](1) === List(1)
       wrapM[Option](1) === Some(1)
+
     }
 
     "TraverseUsage" should {
@@ -250,11 +253,11 @@ class ScalazSpec extends Specification {
     }
   }
 
-  "Free monad with Evaluator abstraction" should {
+  "Free monad with Evaluator" should {
 
     sealed trait Instruction[+T]
-    case class Tell(prompt: String) extends Instruction[String]
-    case class Ask(msg: String) extends Instruction[String]
+    case class PrintLine(prompt: String) extends Instruction[String]
+    case class ReadLine(msg: String) extends Instruction[String]
 
     trait Evaluator[F[_]] { self ⇒
 
@@ -267,7 +270,7 @@ class ScalazSpec extends Specification {
     object Evaluator {
       def apply[F[_]: Evaluator] = implicitly[Evaluator[F]]
 
-      def nat[F[_], G[_], E <: Evaluator[F]](implicit E: E, G: Monad[G]) = new (F ~> G) {
+      private[Evaluator] def nat[F[_], G[_], E <: Evaluator[F]](implicit E: E, G: Monad[G]) = new (F ~> G) {
         override def apply[A](given: F[A]): G[A] =
           G.pure(E.evaluate(given))
       }
@@ -275,19 +278,19 @@ class ScalazSpec extends Specification {
 
     object EvaluatorLogic extends Evaluator[Instruction] {
       override def evaluate[T](given: Instruction[T]): T = given match {
-        case Tell(text) ⇒ { println(text); "" }
-        case Ask(msg)   ⇒ s"${msg}99" //StdIn.readLine(m)
+        case PrintLine(text) ⇒ { println(text); "" }
+        case ReadLine(msg)   ⇒ s"${msg}99" //StdIn.readLine(m)
       }
     }
 
-    def tellMe = Free.liftFC(Tell("Please enter the size: "))
-    def askMe(m: String) = Free.liftFC(Ask(m))
+    def request = Free.liftFC(PrintLine("Please enter the size: "))
+    def respond(m: String) = Free.liftFC(ReadLine(m))
 
     "run" in {
       val expected = "size:99"
       val program = for {
-        d ← tellMe
-        size ← askMe("size:")
+        d ← request
+        size ← respond("size:")
       } yield size
 
       val sId = Free.runFC(program)(EvaluatorLogic.~>[Id])

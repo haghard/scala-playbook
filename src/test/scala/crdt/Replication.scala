@@ -71,6 +71,7 @@ object Replication {
 
     def task(collector: TrieMap[Int, Set[T]]): Task[Unit] =
       input.dequeue.flatMap { action ⇒
+        //shouldn't be linearizable !!!!!!!!!!!!!!!!!!!!
         P.eval(replicationChannel.compareAndSet(c ⇒ Some(converge(action, c.get))))
         /*zip P.eval(replicator.get))
           .map(out ⇒ LoggerI.info(s"Replica:$numR Order:${out._2.value} VT:[${out._2.versionedEntries}] Local-VT:[$localTime]"))*/
