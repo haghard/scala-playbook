@@ -151,7 +151,6 @@ package object mongo3 {
   implicit class MongoInstructionsSyntax[A](val q: FreeMongoIO[A]) extends AnyVal {
     import Kleisli._
     type Transformation[M[_]] = MongoIO ~> ({ type λ[x] = Kleisli[M, MongoClient, x] })#λ
-    type KleisliM[M[_], Out] = Kleisli[M, MongoClient, Out]
 
     //val m = implicitly[scalaz.Monad[M]] lookup
     //Monad[Task] and MInstruction[Task]) or
