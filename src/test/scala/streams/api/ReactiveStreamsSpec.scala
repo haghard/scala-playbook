@@ -59,7 +59,7 @@ class ReactiveStreamsSpec extends WordSpecLike with MustMatchers {
     }
   }
 
-  "Publisher and 3 Subscribers with different request numbers" should {
+  "Publisher and 3 Subscribers subscribed in different point of time" should {
     "run" in {
       val Size = 100
       val sync = new SyncVar[Long]()
@@ -82,9 +82,9 @@ class ReactiveStreamsSpec extends WordSpecLike with MustMatchers {
       val sync2 = new SyncVar[Long]()
       P.subscribe(new SyncProcessSubscriber[Int](3, sync2, errors) with RandomRequestSubscriber[Int])
 
-      sync1.get
-      sync2.get
-      sync.get must be === Size
+      sync1.get must be <= Size.toLong
+      sync2.get must be <= Size.toLong
+      sync.get must be === Size.toLong
     }
   }
 }

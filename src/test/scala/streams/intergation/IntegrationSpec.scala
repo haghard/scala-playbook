@@ -34,8 +34,8 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
   import AkkaContext._
   import streams._
 
-  val limit = 152
-  val range = 1 to limit
+  val limit = 153
+  val range = 0 to limit
 
   def throttle[T](rate: FiniteDuration): Flow[T, T, Unit] = {
     Flow() { implicit builder ⇒
@@ -71,14 +71,14 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
    * Zip 2 scalaz-stream processes with akka Zip
    * +-------------+
    * |Process(odd) |---+
-   * +-------------+   | +---------------+
-   *                   +-|Zip(odd, even) |
-   * +-------------+   | +---------------+
+   * +-------------+   | +------------------+
+   *                   +-|Akka Source (Zip) |
+   * +-------------+   | +------------------+
    * |Process(even)|---+
    * +-------------+
    */
-  "Scalaz-Stream processes to Akka Source(like sstream tee)" must {
-    "run fan-out operation" in {
+  "Scalaz-Stream processes to Akka Source" must {
+    "run" in {
       val sync = new SyncVar[Boolean]
 
       //act like tee, deterministically merge
@@ -100,8 +100,10 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
       (odd to Podd.writer[Int]).run.runAsync(_ ⇒ ())
       (even to Peven.writer[Int]).run.runAsync(_ ⇒ ())
 
-      val zipper = tee[Int](Podd, Peven) map { v ⇒ s"${v._1} - ${v._2}" }
-      zipper.toMat(Sink.foreach(x ⇒ println(s"read: $x")))(Keep.right)
+      val zippedSource = tee[Int](Podd, Peven).map(pair ⇒ s"${pair._1} - ${pair._2}")
+
+      zippedSource
+        .toMat(Sink.foreach(x ⇒ println(s"pair: $x")))(Keep.right)
         .run()
         .onComplete { _ ⇒ sync.put(true) }
 
@@ -202,7 +204,7 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
         x
       }.take(25).run.runAsync(_ ⇒ primeSync.put(true))
 
-      primeSync.get
+      primeSync.get must be === true
       evenSync.get must be === true
     }
   }
