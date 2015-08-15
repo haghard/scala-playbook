@@ -20,7 +20,7 @@ version := "0.0.1-SNAPSHOT"
 
 scalaVersion := "2.11.7"
 
-val Akka = "2.4-M2"
+val Akka = "2.4-M3"
 val Doobie = "0.2.2"
 
 parallelExecution in Test := false
@@ -43,14 +43,14 @@ resolvers += "octalmind"             at "https://dl.bintray.com/guillaumebreton/
 
 resolvers += "patriknw at bintray" at "http://dl.bintray.com/patriknw/maven"
 
-//"org.mongo.scalaz"    %% "mongo-query-streams" %  "0.5.2" exclude ("org.specs2", "*"),
 libraryDependencies ++= Seq(
     "org.mongodb"         %  "mongo-java-driver"   %  "3.0.2"  withSources(),
     "org.scalaz.stream"   %% "scalaz-stream"       %  "0.7.2a"    withSources(),
     "com.typesafe.akka"   %% "akka-actor"          %    Akka      withSources(),
     "com.typesafe.akka"   %% "akka-testkit"        %    Akka,
     "com.typesafe.akka"   %% "akka-stream-experimental" % "1.0",
-    "com.typesafe.akka"   %% "akka-persistence-experimental"    % Akka,
+    //"com.typesafe.akka" %% "akka-persistence-query-experimental" % "Akka”
+
     "io.reactivex"        %% "rxscala"             % "0.25.0",
     "org.monifu"          %% "monifu"              % "1.0-M1",
     "log4j"               %  "log4j"               % "1.2.14",

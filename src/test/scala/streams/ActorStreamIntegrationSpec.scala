@@ -1,6 +1,6 @@
 package streams
 
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{TimeUnit, CountDownLatch}
 import java.util.concurrent.Executors._
 
 import akka.actor._
@@ -14,6 +14,7 @@ import scala.concurrent.SyncVar
 import scalaz.stream.Channel
 import scalaz.{ \/-, \/ }
 import scalaz.concurrent.{ Strategy, Task }
+import scala.language.higherKinds
 
 class ActorStreamIntegrationSpec extends TestKit(ActorSystem("Integration"))
     with WordSpecLike with MustMatchers
@@ -45,17 +46,20 @@ class ActorStreamIntegrationSpec extends TestKit(ActorSystem("Integration"))
     }
   })
 
-  sealed trait Response
-  case class GenericResponse[T](in: T, out: String) extends Response
+  sealed trait Domain[In,Out] {
+    def in: In
+    def out: Out
+  }
+  case class DomainString[In](val in: In, val out: String) extends Domain[In, String]
 
-  sealed trait Request {
+  sealed trait Protocol {
     type In
     type Out
     def value: In
     def cb: (Throwable \/ Out ⇒ Unit)
   }
 
-  def envelop[T, B, C <: Request](v: T, f: Throwable \/ B ⇒ Unit) = new Request {
+  def envelop[T, B, C <: Protocol](v: T, f: Throwable \/ B ⇒ Unit) = new Protocol {
     override type In = T
     override type Out = B
     override def value: In = v
@@ -63,20 +67,21 @@ class ActorStreamIntegrationSpec extends TestKit(ActorSystem("Integration"))
   }
 
   import scalaz.concurrent.{ Actor ⇒ ActorZ }
-  val S = newFixedThreadPool(3, new NamedThreadFactory("actors"))
+  val S = newFixedThreadPool(3, new NamedThreadFactory("scalaz-actor"))
 
-  def scalazActor = ActorZ[Request] {
-    case e: Request ⇒ {
-      e.cb(\/-(GenericResponse(e.value,
-        s"${Thread.currentThread().getName}: Hello from type message ${e.value.getClass.getName}").asInstanceOf[e.Out]))
-    }
+  def scalazActor() = ActorZ[Protocol] {
+    case p: Protocol ⇒
+      p.cb(\/-(DomainString(p.value, s"${Thread.currentThread().getName}: Hello from type message ${p.value.getClass.getName}")
+        .asInstanceOf[p.Out]))
+
     case other ⇒ ()
   }(Strategy.Executor(S))
 
-  implicit class ScalazActorRefSyntax[A <: Request](val self: scalaz.concurrent.Actor[A]) {
-    def scalazChannel[T, B]: Channel[Task, T, B] = {
-      scalaz.stream.channel.lift[Task, T, B] { message: T ⇒
-        Task.async { cb: (\/[Throwable, B] ⇒ Unit) ⇒ self ! envelop(message, cb).asInstanceOf[A] }
+  implicit class ScalazActorSyntax[A <: Protocol](val self: scalaz.concurrent.Actor[A]) {
+
+    def scalazChannel[F[_], T]: Channel[Task, T, F[T]] = {
+      scalaz.stream.channel.lift[Task, T, F[T]] { message: T ⇒
+        Task.async { cb: (\/[Throwable, F[T]] ⇒ Unit) ⇒ self ! envelop(message, cb).asInstanceOf[A] }
       }
     }
   }
@@ -88,17 +93,16 @@ class ActorStreamIntegrationSpec extends TestKit(ActorSystem("Integration"))
       val source2: Process[Task, Int] = P.emitAll(Seq.range(1, 11))
 
       Task.fork {
-        (source through scalazActor.scalazChannel[Double, Response]).map(_.toString)
-          .to(scalaz.stream.io.stdOutLines).runLog
+        (source through scalazActor().scalazChannel[DomainString, Double]).map(_.toString)
+          .to(scalaz.stream.io.stdOutLines).run[Task]
       }(S).runAsync(_ ⇒ latch.countDown())
 
       Task.fork {
-        (source2 through scalazActor.scalazChannel[Int, Response]).map(_.toString)
-          .to(scalaz.stream.io.stdOutLines).runLog
+        (source2 through scalazActor().scalazChannel[DomainString, Int]).map(_.toString)
+          .to(scalaz.stream.io.stdOutLines).run[Task]
       }(S).runAsync(_ ⇒ latch.countDown())
 
-      latch.await()
-      1 === 1
+      latch.await(5, TimeUnit.SECONDS) must be === true
     }
   }
 

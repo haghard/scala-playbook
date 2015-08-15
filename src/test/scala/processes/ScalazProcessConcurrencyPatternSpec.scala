@@ -2,7 +2,7 @@ package processes
 
 import org.scalacheck.Gen
 import org.apache.log4j.Logger
-import stream.Bytes
+import bytes.Bytes
 import scalaz.{ \/-, -\/, \/ }
 import scalaz.stream.Process._
 import scala.concurrent.SyncVar

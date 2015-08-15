@@ -1,4 +1,4 @@
-package stream
+package bytes
 
 import java.nio.ByteBuffer
 import java.nio.charset.Charset
@@ -89,9 +89,9 @@ final class BytesBuilder extends mutable.Builder[Byte, Bytes] {
 }
 
 /** Bytes instance with only one segment **/
-final case class Bytes1 private[stream] (private[stream] val src: Array[Byte],
-                                         private[stream] val pos: Int,
-                                         val length: Int) extends Bytes {
+final case class Bytes1 private[bytes] (private[bytes] val src: Array[Byte],
+                                        private[bytes] val pos: Int,
+                                        val length: Int) extends Bytes {
 
   def apply(idx: Int): Byte = src(pos + idx)
   def append(that: Bytes): Bytes =
@@ -195,7 +195,7 @@ object Bytes1 {
 }
 
 /** Bytes instance with N segments **/
-final case class BytesN private[stream] (private[stream] val seg: Vector[Bytes1]) extends Bytes {
+final case class BytesN private[bytes] (private[bytes] val seg: Vector[Bytes1]) extends Bytes {
 
   def append(that: Bytes): Bytes =
     if (that.isEmpty) this
