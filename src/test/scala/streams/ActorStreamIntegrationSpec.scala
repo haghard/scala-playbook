@@ -71,8 +71,12 @@ class ActorStreamIntegrationSpec extends TestKit(ActorSystem("Integration"))
 
   def scalazActor() = ActorZ[Protocol] {
     case p: Protocol ⇒
-      p.cb(\/-(DomainString(p.value, s"${Thread.currentThread().getName}: Hello from type message ${p.value.getClass.getName}")
-        .asInstanceOf[p.Out]))
+      p.cb(
+        \/.right(
+          DomainString(p.value, s"${Thread.currentThread().getName}: Hello from type message ${p.value.getClass.getName}")
+            .asInstanceOf[p.Out]
+        )
+      )
 
     case other ⇒ ()
   }(Strategy.Executor(S))
