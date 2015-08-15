@@ -52,7 +52,7 @@ class Mongo3AlgSpec extends Specification {
       rs ← (program findOne query(id.get("catId").asInstanceOf[Int]))
     } yield rs
 
-    val task = exp.nat[Task].run(client)
+    val task = exp.into[Task].run(client)
 
     val r = task.attemptRun match {
       case \/-(obj) ⇒ obj.get("rs").asInstanceOf[DBObject] ne null
@@ -73,7 +73,7 @@ class Mongo3AlgSpec extends Specification {
       rs ← (program findOne query(id.get("catId").asInstanceOf[Int]))
     } yield rs
 
-    val ioTask = exp.nat[IO].run(client)
+    val ioTask = exp.into[IO].run(client)
     val r = ioTask.unsafePerformIO()
 
     r != null should beTrue
@@ -90,7 +90,7 @@ class Mongo3AlgSpec extends Specification {
       rs ← (program findOne query(id.get("catId").asInstanceOf[Int]))
     } yield rs
 
-    val dbFuture = exp.nat[Future].run(client)
+    val dbFuture = exp.into[Future].run(client)
     val r = Await.ready(dbFuture, new FiniteDuration(5, TimeUnit.SECONDS))
 
     r != null should beTrue
@@ -107,7 +107,7 @@ class Mongo3AlgSpec extends Specification {
       rs ← program findOne query(id.get("catId").asInstanceOf[Int])
     } yield rs
 
-    val r = exp.nat[Observable].run(client).toBlocking.first
+    val r = exp.into[Observable].run(client).toBlocking.first
 
     r.get("rs").asInstanceOf[DBObject].get("catId").asInstanceOf[Int] === 512
     client.close()
@@ -125,7 +125,7 @@ class Mongo3AlgSpec extends Specification {
       rs ← program findOne query(id.get("catId").asInstanceOf[Int])
     } yield rs
 
-    val r = exp.nat[PTask].run(client).runLog.run
+    val r = exp.into[PTask].run(client).runLog.run
 
     r(0).get("rs").asInstanceOf[DBObject].get("catId").asInstanceOf[Int] === 512
     client.close()
@@ -145,7 +145,7 @@ class Mongo3AlgSpec extends Specification {
       _ ← program.insert(dynamic(600 + i))
     } yield ()
 
-    (0 until Size).foreach(i ⇒ insert(i).nat[Task].run(client).run)
+    (0 until Size).foreach(i ⇒ insert(i).into[Task].run(client).run)
 
     val buf = Buffer.empty[DBObject]
     val BufferSink = io.fillBuffer(buf)
@@ -153,7 +153,7 @@ class Mongo3AlgSpec extends Specification {
 
     Task.fork {
       ((for (r ← (program.find(query(600)))) yield r)
-        .nat[PTask].run(client) observe (LoggerSink) to BufferSink)
+        .into[PTask].run(client) observe (LoggerSink) to BufferSink)
         .run[Task]
     }(executor).runAsync(_ ⇒ latch.countDown())
 
@@ -173,7 +173,7 @@ class Mongo3AlgSpec extends Specification {
       _ ← program.insert(dynamic(600 + i))
     } yield ()
 
-    (0 until Size).foreach(i ⇒ insert(i).nat[Task].run(client).run)
+    (0 until Size).foreach(i ⇒ insert(i).into[Task].run(client).run)
 
     val latch = new CountDownLatch(1)
     val counter = new AtomicLong(0)
@@ -192,7 +192,7 @@ class Mongo3AlgSpec extends Specification {
     }
 
     (for { r ← (program find query(500)) } yield r)
-      .nat[Observable].run(client)
+      .into[Observable].run(client)
       .observeOn(ExecutionContextScheduler(ExecutionContext.fromExecutor(executor)))
       .subscribe(s)
 
@@ -213,7 +213,7 @@ class Mongo3AlgSpec extends Specification {
       r ← program find query(500)
     } yield r
 
-    val task = exp.nat[Task].run(client)
+    val task = exp.into[Task].run(client)
 
     val r = task.attemptRun match {
       case \/-(obj)   ⇒ obj.get("rs").asInstanceOf[java.util.List[DBObject]].size() == 2
@@ -236,7 +236,7 @@ class Mongo3AlgSpec extends Specification {
       r ← program find query(500)
     } yield r
 
-    val ioTask = exp.nat[IO].run(client)
+    val ioTask = exp.into[IO].run(client)
     val r = ioTask.unsafePerformIO()
 
     r != null should beTrue
@@ -255,7 +255,7 @@ class Mongo3AlgSpec extends Specification {
       r ← program find query(500)
     } yield r
 
-    val ioFuture = exp.nat[Future].run(client)
+    val ioFuture = exp.into[Future].run(client)
     val r = Await.result(ioFuture, new FiniteDuration(5, TimeUnit.SECONDS))
     r.get("rs").asInstanceOf[java.util.List[DBObject]].size() === 2
     client.close()

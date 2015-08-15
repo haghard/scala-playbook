@@ -157,7 +157,7 @@ package object mongo3 {
     //Monad[Observer] and MInstruction[Observer] or
     //Monad[IO] and MInstruction[IO] or
     //Monad[Process] and MInstruction[Process]
-    def nat[M[_]: scalaz.Monad: MInstruction](implicit ex: ExecutorService): Kleisli[M, MongoClient, A] =
+    def into[M[_]: scalaz.Monad: MInstruction](implicit ex: ExecutorService): Kleisli[M, MongoClient, A] =
       runFC[MongoIO, ({ type λ[x] = Kleisli[M, MongoClient, x] })#λ, A](q)(evaluate[M](implicitly[MInstruction[M]].withExecutor(ex)))
 
     private def evaluate[M[_]](evaluator: MInstruction[M]) = new Transformation[M] {
