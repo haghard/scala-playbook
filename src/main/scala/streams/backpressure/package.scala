@@ -166,8 +166,8 @@ package object backpressure {
   }
 
   /**
-   * Merge[In] – (N inputs , 1 output) picks randomly from inputs pushing them one by one to its output
-   * Several sources with different rates fan-in in single merge followed by sink
+   * Merge[In] fan-in operation – (N inputs, 1 output)
+   * Several sources with different rates fan-in in single merge junction followed by sink
    * -Result: Sink rate = sum(sources)
    * @return
    */
