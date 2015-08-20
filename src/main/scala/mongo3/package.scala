@@ -105,7 +105,8 @@ package object mongo3 {
         }
       }
 
-    type TaskP[x] = Process[Task, x] //({ type λ[x] = Process[Task, x] })#λ
+    type TaskP[x] = Process[Task, x]
+    //({ type λ[x] = Process[Task, x] })#λ
     implicit def ProcessAction: MInstruction[TaskP] =
       new MInstruction[TaskP] {
         override val logger = Logger.getLogger("Process-Producer")

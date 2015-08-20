@@ -4,9 +4,10 @@ import java.net.{ InetAddress, InetSocketAddress }
 import java.nio.ByteBuffer
 import java.nio.channels.DatagramChannel
 
-import akka.actor.{ Props, ActorSystem }
+import akka.actor.{Actor, Props, ActorSystem}
+import akka.stream.actor.ActorPublisherMessage.{Cancel, Request}
 import akka.stream.actor.ActorSubscriberMessage.{ OnComplete, OnNext }
-import akka.stream.actor.{ OneByOneRequestStrategy, RequestStrategy, ActorSubscriber }
+import akka.stream.actor.{ActorPublisher, OneByOneRequestStrategy, ActorSubscriber}
 import akka.stream.{ OverflowStrategy, ActorMaterializer }
 import akka.stream.scaladsl._
 import scala.concurrent.duration._
@@ -165,6 +166,55 @@ package object backpressure {
   }
 
   /**
+   * Merge[In] – (N inputs , 1 output) picks randomly from inputs pushing them one by one to its output
+   * Several sources with different rates fan-in in single merge followed by sink
+   * -Result: Sink rate = sum(sources)
+   * @return
+   */
+  def scenario7: RunnableGraph[Unit] = {
+
+    val queryStreams = Source() { implicit b ⇒
+      import FlowGraph.Implicits._
+      val streams = List("okcStream","houStream","miaStream", "sasStream")
+      val latencies = List(20l, 30l, 40l, 45l).iterator
+
+      val merge = b.add(Merge[Int](streams.size))
+      streams.foreach { name ⇒
+        Source.actorPublisher(Props(classOf[TopicReader], name, statsD, latencies.next())) ~> merge
+      }
+      merge.out
+    }
+
+    val fastSink = Sink.actorSubscriber(Props(classOf[DelayingActor], "multiStreamSink", statsD, 0l))
+
+    FlowGraph.closed() { implicit builder ⇒
+      import FlowGraph.Implicits._
+      //val merge = builder.add(Merge[Int](4))
+
+      //val okcSource = throttledSource(statsD, 1 second, 20 milliseconds, 10000, "okcSource")
+      //val houSource = throttledSource(statsD, 1 second, 30 milliseconds, 10000, "houSource")
+      //val miaSource = throttledSource(statsD, 1 second, 40 milliseconds, 10000, "miaSource")
+      //val sasSource = throttledSource(statsD, 1 second, 45 milliseconds, 10000, "sasSource")
+
+      //or
+      //Source.actorPublisher(Props(classOf[TopicReader], "okcSource", statsD, 20l)) ~> merge
+      //Source.actorPublisher(Props(classOf[TopicReader], "houSource", statsD, 30l)) ~> merge
+      //Source.actorPublisher(Props(classOf[TopicReader], "miaSource", statsD, 40l)) ~> merge
+      //Source.actorPublisher(Props(classOf[TopicReader], "sasSource", statsD, 45l)) ~> merge
+      //merge ~> fastSink
+
+      /*
+      okcSource ~> merge
+      houSource ~> merge
+      miaSource ~> merge
+      sasSource ~> merge
+                   merge ~> fastSink
+      */
+      queryStreams ~> fastSink
+    }
+  }
+
+  /**
    * Create a source which is throttled to a number of message per second.
    */
   def throttledSource(statsD: InetSocketAddress, delay: FiniteDuration, interval: FiniteDuration, numberOfMessages: Int, name: String): Source[Int, Unit] = {
@@ -202,8 +252,6 @@ package object backpressure {
 }
 
 trait StatsD {
-  self: ActorSubscriber ⇒
-
   val Encoding = "utf-8"
 
   val sendBuffer = ByteBuffer.allocate(1024)
@@ -219,6 +267,44 @@ trait StatsD {
     sendBuffer.rewind()
   }
 }
+
+
+/**
+ * Same as throttledSource but using ActorPublisher
+ * @param name
+ * @param statsD
+ * @param delay
+ */
+class TopicReader(name: String, val statsD: InetSocketAddress, delay: Long) extends ActorPublisher[Int] with StatsD {
+  val Limit = 10000
+  var progress = 0
+  val observeGap = 1000
+
+  override def receive: Actor.Receive = {
+    case Request(n) => if (isActive && totalDemand > 0) {
+      var n0 = n
+
+      if(progress >= Limit)
+        self ! Cancel
+
+      while (n0 > 0) {
+        if(progress % observeGap == 0)
+          println(s"$name: $progress")
+
+        progress += 1
+        onNext(progress)
+        Thread.sleep(delay)
+        notifyStatsD(s"$name:1|c")
+        n0 -= 1
+      }
+    }
+
+    case Cancel =>
+      println(name + " is canceled")
+      context.system.stop(self)
+  }
+}
+
 
 class DelayingActor(name: String, val statsD: InetSocketAddress, delay: Long) extends ActorSubscriber
     with StatsD {

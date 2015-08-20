@@ -1,7 +1,7 @@
 package streams.intergation
 
 import akka.stream.scaladsl._
-import akka.actor.{ ActorRef, ActorSystem }
+import akka.actor.{Props, Actor, ActorRef, ActorSystem}
 import akka.testkit.{ ImplicitSender, TestKit }
 import org.scalatest.concurrent.AsyncAssertions.Waiter
 import akka.stream.actor.{ ActorSubscriber, ActorPublisher }
@@ -53,7 +53,7 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
 
       //count ack messages
       implicit val M = Monoid[Int]
-      val ssSource: Process[Task, Int] = P.emitAll(range)
+      val ssSource = P.emitAll(range).toSource
 
       ssSource.toAkkaFlow
         .fold1Map(_ ⇒ 1)
@@ -82,7 +82,7 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
       val sync = new SyncVar[Boolean]
 
       //act like tee, deterministically merge
-      def tee[T](left: ActorRef, right: ActorRef): Source[(T, T), Unit] =
+      def zip[T](left: ActorRef, right: ActorRef): Source[(T, T), Unit] =
         Source() { implicit builder ⇒
           import FlowGraph.Implicits._
           val zip = builder.add(Zip[T, T]())
@@ -91,8 +91,8 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
           zip.out
         }
 
-      val odd: Process[Task, Int] = P.emitAll(range).filter(_ % 2 != 0)
-      val even: Process[Task, Int] = P.emitAll(range).filter(_ % 2 == 0)
+      val odd = P.emitAll(range).toSource.filter(_ % 2 != 0)
+      val even = P.emitAll(range).toSource.filter(_ % 2 == 0)
 
       val Podd = system.actorOf(streams.BatchWriter.props[Int])
       val Peven = system.actorOf(streams.BatchWriter.props[Int])
@@ -100,7 +100,7 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
       (odd to Podd.writer[Int]).run.runAsync(_ ⇒ ())
       (even to Peven.writer[Int]).run.runAsync(_ ⇒ ())
 
-      val zippedSource = tee[Int](Podd, Peven).map(pair ⇒ s"${pair._1} - ${pair._2}")
+      val zippedSource = zip[Int](Podd, Peven).map(pair ⇒ s"${pair._1} - ${pair._2}")
 
       zippedSource
         .toMat(Sink.foreach(x ⇒ println(s"pair: $x")))(Keep.right)
@@ -137,8 +137,8 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
           import FlowGraph.Implicits._
           val bcast = b.add(Broadcast[Int](2))
           Source(ActorPublisher[Int](p)) ~> bcast
-          bcast.out(0) ~> lout
-          bcast.out(1) ~> rout
+          bcast ~> lout
+          bcast ~> rout
       }.run()
 
       lf zip rf onComplete {

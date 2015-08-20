@@ -49,8 +49,6 @@ libraryDependencies ++= Seq(
     "com.typesafe.akka"   %% "akka-actor"          %    Akka      withSources(),
     "com.typesafe.akka"   %% "akka-testkit"        %    Akka,
     "com.typesafe.akka"   %% "akka-stream-experimental" % "1.0",
-    //"com.typesafe.akka" %% "akka-persistence-query-experimental" % "Akka”
-
     "io.reactivex"        %% "rxscala"             % "0.25.0",
     "org.monifu"          %% "monifu"              % "1.0-M1",
     "log4j"               %  "log4j"               % "1.2.14",
@@ -61,6 +59,7 @@ libraryDependencies ++= Seq(
     "com.rbmhtechnology"  %% "eventuate"           % "0.2.2",
     "com.github.patriknw" %% "akka-data-replication" % "0.11",
     "org.scala-stm"       %% "scala-stm"           % "0.7"
+    //"au.com.langdale"     %% "flowlib"             % "0.9"
 )
 
 libraryDependencies ++= Seq(
