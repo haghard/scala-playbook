@@ -1,5 +1,6 @@
 package scalaz
 
+import scala.concurrent.Future
 import scalaz._
 import Scalaz._
 import scala.language.higherKinds
@@ -58,9 +59,12 @@ class ScalazSpec extends Specification {
       1.minisM(List(7, 2)) === List(6, 1)
     }
 
-    "Functors composition" in {
+    "Functor lift and compose" in {
       val F = Functor[List] compose Functor[Option]
-      F.map(List(Some(1), None, Some(2)))(_ + 1) === List(Some(2), None, Some(3))
+      val FL = Functor[List].lift[Int, Int](in => in*2)
+
+      FL(List(2,3,4)) === List(4,6,8)
+      F.map(List(Some(1), None, Some(2)))(_ + 1) === List(2.some, None, 3.some)
     }
   }
 
@@ -82,6 +86,26 @@ class ScalazSpec extends Specification {
 
     "Semigroup(Monoid) and ApplicativeBuilder relations" in {
       (1.some |+| 2.some) === (1.some |@| 2.some)(_ + _)
+    }
+  }
+
+  "Applicative" should {
+    "with lift" in {
+      val prefix = "http://url"
+
+      val AP = Applicative[Option]
+      AP.apply2(2.some, 4.some)(_+_) === Some(6)
+      AP.apply2(2.some, scalaz.Scalaz.none[Int])(_+_) === None
+
+      val APL = AP.lift[Int,String] { in: Int => in.toString }
+      APL(4.some) === Some("4")
+
+      def start = Traverse[List].lift[Int, String] { id => s"$prefix/$id" }
+
+      val accTask: scalaz.concurrent.Task[List[String]] =
+        start(List(1,2,3)).traverse { url => scalaz.concurrent.Task.now(url) }
+
+      accTask.run === List(1,2,3).map(s"http://url/"+ _)
     }
   }
 
@@ -188,13 +212,13 @@ class ScalazSpec extends Specification {
 
       import scala.language.reflectiveCalls
       def wrapA[F[_]] = new {
-        def apply[A](a: A)(implicit ev: Applicative[F]): F[A] =
-          ev.point(a)
+        def apply[A](a: A)(implicit AP: Applicative[F]): F[A] =
+          AP.point(a)
       }
 
       def wrapM[F[_]] = new {
-        def apply[A](a: A)(implicit ev: Monad[F]): F[A] =
-          ev.point(a)
+        def apply[A](a: A)(implicit M: Monad[F]): F[A] =
+          M.point(a)
       }
 
       wrap[List](1) === List(1)
@@ -232,7 +256,6 @@ class ScalazSpec extends Specification {
         //the entire computation is None
         val l0 = l :+ 5
         l0.traverse(step) === l0.map(step).sequence
-
       }
 
       "sequenceU for collect errors" in {

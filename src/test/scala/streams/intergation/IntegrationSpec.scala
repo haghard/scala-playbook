@@ -1,7 +1,7 @@
 package streams.intergation
 
 import akka.stream.scaladsl._
-import akka.actor.{Props, Actor, ActorRef, ActorSystem}
+import akka.actor.{ Props, Actor, ActorRef, ActorSystem }
 import akka.testkit.{ ImplicitSender, TestKit }
 import org.scalatest.concurrent.AsyncAssertions.Waiter
 import akka.stream.actor.{ ActorSubscriber, ActorPublisher }

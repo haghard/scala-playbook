@@ -1,3 +1,4 @@
+/*
 package scalaz.netty
 
 import java.net.InetSocketAddress
@@ -96,4 +97,4 @@ class StreamingServerSpec extends Specification with ScalazNettyConfig {
       r.size must be equalTo m
     }
   }
-}
+}*/

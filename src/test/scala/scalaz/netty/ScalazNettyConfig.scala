@@ -1,3 +1,4 @@
+/*
 package scalaz.netty
 
 import scalaz.stream.Process
@@ -81,4 +82,4 @@ trait ScalazNettyConfig {
       Process.await(Task.delay(i))(i ⇒ Process.emit(i) ++ go(i + 1l))
     go(1l)
   }
-}
+}*/

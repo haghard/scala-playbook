@@ -184,7 +184,7 @@ class BTreeStructuralRecursionSpec extends Specification {
 
     override def foldMap2[T, A](fa: Option[Tree[T]])(f: (T) ⇒ A)(implicit m: Monoid[A]): A = ???
 
-    override def foldMapPar[T, A](fa: Tree[T])(f: (T) ⇒ A)(implicit M: Monoid[A]): Task[A] =
+    override def foldMapPar[T, A](fa: Tree[T])(f: T ⇒ A)(implicit M: Monoid[A]): Task[A] =
       Task.now(fa).flatMap {
         foldMap(_)(e ⇒ Task.delay(f(e)))(monoidPar(M))
       }

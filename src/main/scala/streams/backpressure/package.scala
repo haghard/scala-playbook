@@ -4,12 +4,14 @@ import java.net.{ InetAddress, InetSocketAddress }
 import java.nio.ByteBuffer
 import java.nio.channels.DatagramChannel
 
-import akka.actor.{Actor, Props, ActorSystem}
-import akka.stream.actor.ActorPublisherMessage.{Cancel, Request}
+import akka.actor.{ Actor, Props, ActorSystem }
+import akka.stream.actor.ActorPublisherMessage.{ Cancel, Request }
 import akka.stream.actor.ActorSubscriberMessage.{ OnComplete, OnNext }
-import akka.stream.actor.{ActorPublisher, OneByOneRequestStrategy, ActorSubscriber}
-import akka.stream.{ OverflowStrategy, ActorMaterializer }
+import akka.stream.actor._
+import akka.stream.{ ActorMaterializerSettings, OverflowStrategy, ActorMaterializer }
 import akka.stream.scaladsl._
+import com.typesafe.config.ConfigFactory
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -17,9 +19,36 @@ import scala.concurrent.duration.FiniteDuration
 
 package object backpressure {
 
-  implicit val system = ActorSystem("Sys")
-  implicit val materializer = ActorMaterializer()
-  val statsD = new InetSocketAddress(InetAddress.getByName("192.168.0.171"), 8125)
+  val dispCfg = ConfigFactory.parseString(
+    """
+      |akka {
+      |  flow-dispatcher {
+      |    type = Dispatcher
+      |    executor = "fork-join-executor"
+      |    fork-join-executor {
+      |      parallelism-min = 4
+      |      parallelism-max = 8
+      |    }
+      |  }
+      |  blocking-dispatcher {
+      |    executor = "thread-pool-executor"
+      |    thread-pool-executor {
+      |      core-pool-size-min = 4
+      |      core-pool-size-max = 4
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
+  implicit val system = ActorSystem("System")
+
+  val Settings = ActorMaterializerSettings(system)
+    .withInputBuffer(initialSize = 64, maxSize = 64)
+    .withDispatcher("akka.flow-dispatcher")
+
+  implicit val materializer = ActorMaterializer(Settings)
+
+  val statsD = new InetSocketAddress(InetAddress.getByName("192.168.0.134"), 8125)
   case class Tick()
 
   /**
@@ -175,7 +204,7 @@ package object backpressure {
 
     val queryStreams = Source() { implicit b ⇒
       import FlowGraph.Implicits._
-      val streams = List("okcStream","houStream","miaStream", "sasStream")
+      val streams = List("okcStream", "houStream", "miaStream", "sasStream")
       val latencies = List(20l, 30l, 40l, 45l).iterator
 
       val merge = b.add(Merge[Int](streams.size))
@@ -211,6 +240,70 @@ package object backpressure {
                    merge ~> fastSink
       */
       queryStreams ~> fastSink
+    }
+  }
+
+  /**
+   * Take elements from source one by one and run some other computation in parallel and after merge all together
+   * @return
+   */
+
+  import akka.stream.{ Attributes, UniformFanOutShape }
+  import akka.stream.scaladsl.FlexiRoute.{ DemandFromAll, RouteLogic }
+  case class RoundRobinBalance[T](size: Int) extends FlexiRoute[T, UniformFanOutShape[T, T]](
+    new UniformFanOutShape(size), Attributes.name(s"RoundRobinBalance-for-$size")) {
+    private var cursor = -1
+    private var index = 0
+    override def createRouteLogic(s: UniformFanOutShape[T, T]) = new RouteLogic[T] {
+      override def initialState = State[Unit](DemandFromAll((0 to (size - 1)).map(s.out(_)))) { (ctx, out, in) ⇒
+        if (cursor == Int.MaxValue) cursor = -1
+
+        cursor += 1
+        index = cursor % size
+        ctx.emit(s.out(index))(in)
+        SameState
+      }
+
+      override def initialCompletionHandling = eagerClose
+    }
+  }
+
+  /**
+   * Take elements from source one by one and run some other computation in parallel and after merge all together
+   * Adding buffer to allow batching in sink, to make sink more bursty
+   * @return
+   */
+  def scenario8: RunnableGraph[Unit] = {
+    val parallelism = 4
+
+    //val bufferSize = 1
+    //val sink = Sink.actorSubscriber(Props(classOf[DelayingSyncActor], "splitMergeSink8", statsD, 0l))
+
+    val bufferSize = 128
+    val sink = Sink.actorSubscriber(Props(classOf[BatchActor], "splitMergeSink8", statsD, 0l, bufferSize))
+
+    val latencies = List(10l, 30l, 35l, 45l).iterator
+
+    val source = throttledSource(statsD, 1 second, 10 milliseconds, Int.MaxValue, "fastProducer8")
+
+    def nested(sleep: Long) = Flow[Int].buffer(bufferSize, OverflowStrategy.backpressure).map { r ⇒ Thread.sleep(sleep); r }
+
+    def bufAttrib = Attributes.inputBuffer(initial = bufferSize, max = bufferSize)
+
+    FlowGraph.closed() { implicit b ⇒
+      import FlowGraph.Implicits._
+      //same semantic but worst performance
+      //val balance = b.add(RoundRobinBalance[Int](parallelism))
+      val balancer = b.add(Balance[Int](parallelism).withAttributes(bufAttrib))
+      val merge = b.add(Merge[Int](parallelism).withAttributes(bufAttrib))
+
+      source ~> balancer
+
+      for (i ← 0 until parallelism) {
+        balancer ~> nested(latencies.next()) ~> merge
+      }
+
+      merge ~> sink
     }
   }
 
@@ -268,7 +361,6 @@ trait StatsD {
   }
 }
 
-
 /**
  * Same as throttledSource but using ActorPublisher
  * @param name
@@ -281,14 +373,14 @@ class TopicReader(name: String, val statsD: InetSocketAddress, delay: Long) exte
   val observeGap = 1000
 
   override def receive: Actor.Receive = {
-    case Request(n) => if (isActive && totalDemand > 0) {
+    case Request(n) ⇒ if (isActive && totalDemand > 0) {
       var n0 = n
 
-      if(progress >= Limit)
+      if (progress >= Limit)
         self ! Cancel
 
       while (n0 > 0) {
-        if(progress % observeGap == 0)
+        if (progress % observeGap == 0)
           println(s"$name: $progress")
 
         progress += 1
@@ -299,12 +391,11 @@ class TopicReader(name: String, val statsD: InetSocketAddress, delay: Long) exte
       }
     }
 
-    case Cancel =>
+    case Cancel ⇒
       println(name + " is canceled")
       context.system.stop(self)
   }
 }
-
 
 class DelayingActor(name: String, val statsD: InetSocketAddress, delay: Long) extends ActorSubscriber
     with StatsD {
@@ -352,6 +443,36 @@ class DegradingActor(val name: String, val statsD: InetSocketAddress, delayPerMs
     case OnComplete ⇒
       println(s"Complete DegradingActor")
       context.system.stop(self)
+  }
+}
+
+class BatchActor(name: String, val statsD: InetSocketAddress, delay: Long, bufferSize: Int) extends ActorSubscriber with StatsD {
+
+  private val queue = new mutable.Queue[Int]
+
+  override protected val requestStrategy: RequestStrategy = new MaxInFlightRequestStrategy(bufferSize) {
+    override val inFlightInternally = queue.size
+  }
+
+  def this(name: String, statsD: InetSocketAddress, bufferSize: Int) {
+    this(name, statsD, 0, bufferSize)
+  }
+
+  override def receive: Receive = {
+    case OnNext(msg: Int) ⇒
+      if (queue.size == bufferSize) reply()
+      else queue += msg
+
+    case OnComplete ⇒
+      println(s"Complete DelayingActor")
+      context.system.stop(self)
+  }
+
+  private def reply() = {
+    while (!queue.isEmpty) {
+      val _ = queue.dequeue()
+      notifyStatsD(s"$name:1|c")
+    }
   }
 }
 

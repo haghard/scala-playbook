@@ -1,3 +1,4 @@
+/*
 package scalaz.netty
 
 import java.net.InetSocketAddress
@@ -65,4 +66,4 @@ class ServerWithExternalEffect extends Specification with ScalazNettyConfig {
       r.size must be equalTo n + 1
     }
   }
-}
+}*/

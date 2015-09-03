@@ -60,4 +60,72 @@ class AkkaBackPressureSpec extends TestKit(ActorSystem("streams")) with WordSpec
       }
     }
   }
+/*
+  import akka.stream._
+  import scala.collection._
+
+  case class PriorityWorkerPoolShape[In, Out](jobsIn: Inlet[In], priorityJobsIn: Inlet[In],
+                                              resultsOut: Outlet[Out]) extends Shape {
+    override val inlets: immutable.Seq[Inlet[_]] =
+      jobsIn :: priorityJobsIn :: Nil
+
+    override val outlets: immutable.Seq[Outlet[_]] = resultsOut :: Nil
+
+    override def deepCopy() = PriorityWorkerPoolShape(jobsIn.carbonCopy(),
+      priorityJobsIn.carbonCopy(), resultsOut.carbonCopy())
+
+    // A Shape must also be able to create itself from existing ports
+    override def copyFromPorts(inlets: immutable.Seq[Inlet[_]], outlets: immutable.Seq[Outlet[_]]) = {
+      assert(inlets.size == this.inlets.size)
+      assert(outlets.size == this.outlets.size)
+      // This is why order matters when overriding inlets and outlets
+      PriorityWorkerPoolShape(inlets(0), inlets(1), outlets(0))
+    }
+  }
+
+  object PriorityWorkerPool {
+    def apply[In, Out](worker: Flow[In, Out, Any], workerCount: Int): Graph[PriorityWorkerPoolShape[In, Out], Unit] = {
+      FlowGraph.partial() { implicit b ⇒
+        import FlowGraph.Implicits._
+        val priorityMerge = b.add(MergePreferred[In](1))
+        val balance = b.add(Balance[In](workerCount))
+        val resultsMerge = b.add(Merge[Out](workerCount))
+        // After merging priority and ordinary jobs, we feed them to the balancer
+        priorityMerge ~> balance
+
+        // Wire up each of the outputs of the balancer to a worker flow
+        // then merge them back
+        for (i ← 0 until workerCount)
+          balance.out(i) ~> worker ~> resultsMerge.in(i)
+        // We now expose the input ports of the priorityMerge and the output
+        // of the resultsMerge as our PriorityWorkerPool ports
+        // -- all neatly wrapped in our domain specific Shape
+        PriorityWorkerPoolShape(
+          jobsIn = priorityMerge.in(0),
+          priorityJobsIn = priorityMerge.preferred,
+          resultsOut = resultsMerge.out)
+      }
+    }
+  }
+
+  "PriorityWorkerPool" should {
+    "run" in {
+      val worker1 = Flow[String].map("step 1 " + _)
+      val worker2 = Flow[String].map("step 2 " + _)
+
+      FlowGraph.closed() { implicit b ⇒
+        import FlowGraph.Implicits._
+        val priorityPool1 = b.add(PriorityWorkerPool(worker1, 4))
+        val priorityPool2 = b.add(PriorityWorkerPool(worker2, 2))
+
+        Source(1 to 100).map("job: " + _) ~> priorityPool1.jobsIn
+        Source(1 to 100).map("priority job: " + _) ~> priorityPool1.priorityJobsIn
+
+        priorityPool1.resultsOut ~> priorityPool2.jobsIn
+
+        Source(1 to 100).map("one-step, priority " + _) ~> priorityPool2.priorityJobsIn
+        priorityPool2.resultsOut ~> Sink.foreach(println)
+      }.run()
+    }
+  }*/
 }

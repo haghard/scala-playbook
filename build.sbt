@@ -22,6 +22,7 @@ scalaVersion := "2.11.7"
 
 val Akka = "2.4-M3"
 val Doobie = "0.2.2"
+val Origami = "1.0-20150902134048-8d00462"
 
 parallelExecution in Test := false
 
@@ -33,15 +34,19 @@ resolvers += "Sonatype" at "https://oss.sonatype.org/content/groups/public/"
 
 resolvers += "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases"
 
-resolvers += "haghard-bintray"    at "http://dl.bintray.com/haghard/releases"
-
 resolvers += "tpolecat" at "http://dl.bintray.com/tpolecat/maven"
 
 resolvers += "RichRelevance Bintray" at "http://dl.bintray.com/rr/releases"
 
 resolvers += "octalmind"             at "https://dl.bintray.com/guillaumebreton/maven"
 
-resolvers += "patriknw at bintray" at "http://dl.bintray.com/patriknw/maven"
+resolvers += "fristi at bintray" at "http://dl.bintray.com/fristi/maven"
+
+resolvers += "oncue.releases" at "http://dl.bintray.com/oncue/releases/"
+
+resolvers += Resolver.url("ambiata-oss", new URL("https://ambiata-oss.s3.amazonaws.com"))(Resolver.ivyStylePatterns)
+
+//resolvers += "haghard-bintray"    at "http://dl.bintray.com/haghard/releases"
 
 libraryDependencies ++= Seq(
     "org.mongodb"         %  "mongo-java-driver"   %  "3.0.2"  withSources(),
@@ -52,14 +57,20 @@ libraryDependencies ++= Seq(
     "io.reactivex"        %% "rxscala"             % "0.25.0",
     "org.monifu"          %% "monifu"              % "1.0-M1",
     "log4j"               %  "log4j"               % "1.2.14",
-    "org.scalaz.netty"    %% "scalaz-netty"        % "0.2.1",
+    //"org.scalaz.netty"    %% "scalaz-netty"        % "0.2.1",
     "org.scodec"          %% "scodec-stream"       % "0.10.0",
     "com.twitter"         %% "util-core"           % "6.23.0",
     "com.google.guava"    %  "guava"               % "18.0",
     "com.rbmhtechnology"  %% "eventuate"           % "0.2.2",
     "com.github.patriknw" %% "akka-data-replication" % "0.11",
-    "org.scala-stm"       %% "scala-stm"           % "0.7"
+    "com.nrinaudo"        %% "scalaz-stream-csv"   % "0.1.3",
     //"au.com.langdale"     %% "flowlib"             % "0.9"
+    //"oncue.quiver"        %% "core"                % "3.2.0",
+    //"oncue.quiver"        %% "core"                % "3.2.0",
+    //"nl.mdj"              %% "itinere-core"        % "0.1",
+    "com.ambiata"         %% "origami-core"             % Origami,
+    "com.ambiata"         %% "origami-stream"           % Origami
+
 )
 
 libraryDependencies ++= Seq(
