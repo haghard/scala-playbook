@@ -20,7 +20,7 @@ version := "0.0.1-SNAPSHOT"
 
 scalaVersion := "2.11.7"
 
-val Akka = "2.4-M3"
+val Akka = "2.4.0-RC2"
 val Doobie = "0.2.2"
 val Origami = "1.0-20150902134048-8d00462"
 
@@ -70,7 +70,6 @@ libraryDependencies ++= Seq(
     //"org.scalaz.netty"    %% "scalaz-netty"        % "0.2.1",
     "com.ambiata"         %% "origami-core"             % Origami,
     "com.ambiata"         %% "origami-stream"           % Origami
-
 )
 
 libraryDependencies ++= Seq(

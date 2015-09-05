@@ -132,11 +132,8 @@ class ScalazProcessPublisher[T] private (val source: Process[Task, T])(implicit 
     (for {
       size ← requests.discrete.filter(_ > -1)
       _ ← (CSource chunk size) map { seq ⇒
-        seq foreach { i ⇒
-          s.onNext(i)
-          //Thread.sleep(ThreadLocalRandom.current().nextInt(100, 200))
-        }
-        if (size > seq.size) {
+        seq.foreach(s.onNext(_))
+        if (size > seq.size) { //controversial behavior
           logger.info(s"Requested $size - Received ${seq.size} ")
           throw new Exception(streams.io.exitMessage)
         }
