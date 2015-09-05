@@ -341,6 +341,27 @@ package object backpressure {
       (zip.in0, dropOne.outlet)
     }
 
+
+  /**
+   * Split one upstream into 2 downstreams, filter on even/odd, merge
+   *
+   * @return
+   */
+  def broadcastFilterMerge: Flow[Long, Long, Unit] =
+    Flow() { implicit b ⇒
+      import FlowGraph.Implicits._
+
+      val broadcast = b.add(Broadcast[Long](2))
+      val even = b.add(Flow[Long].filter(_ % 2 == 0))
+      val odd = b.add(Flow[Long].filter(_ % 2 != 0))
+      val merge = b.add(Merge[Long](2))
+
+      broadcast.out(0) ~> even ~> merge.in(0)
+      broadcast.out(1) ~> odd ~> merge.in(1)
+
+      (broadcast.in, merge.out)
+    }
+
   /**
    * Create a source which is throttled to a number of message per second.
    */
