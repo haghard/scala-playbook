@@ -317,7 +317,7 @@ package object backpressure {
     val sink = Sink.actorSubscriber(Props(classOf[DegradingActor], "timedSink9", statsD, 0l))
 
     val aggregatedSource = source.scan(State(0l, 0l)) { _ withNext _ }
-      .conflate(_.sum)((r:Long, s: State) => r)
+      .conflate(_.sum)(Keep.left)
 
     FlowGraph.closed() { implicit b ⇒
       import FlowGraph.Implicits._
