@@ -308,6 +308,40 @@ package object backpressure {
   }
 
   /**
+   * Fast source with aggregated result and sink with constant period request.
+   * No buffer is required
+   *
+   */
+  def scenario9: RunnableGraph[Unit] = {
+    val source = throttledSource(statsD, 1 second, 10 milliseconds, Int.MaxValue, "fastProducer9")
+    val sink = Sink.actorSubscriber(Props(classOf[DegradingActor], "timedSink9", statsD, 0l))
+
+    val aggregatedSource = source.scan(State(0l, 0l)) { _ withNext _ }
+      .conflate(_.sum)((r:Long, s: State) => r)
+
+    FlowGraph.closed() { implicit b ⇒
+      import FlowGraph.Implicits._
+      (aggregatedSource via every(500 milliseconds)) ~> sink
+    }
+  }
+
+  case class State(totalSamples: Long, sum: Long) {
+    def withNext(current: Long) = this.copy(this.totalSamples + 1, this.sum + current)
+  }
+
+  def every(interval: FiniteDuration): Flow[Long, Long, Unit] =
+    Flow() { implicit b ⇒
+      import FlowGraph.Implicits._
+      val zip = b.add(ZipWith[Long, Tick.type, Long](Keep.left).withAttributes(Attributes.inputBuffer(1, 1)))
+      val dropOne = b.add(Flow[Long].drop(1))
+
+      Source(Duration.Zero, interval, Tick) ~> zip.in1
+      zip.out ~> dropOne.inlet
+
+      (zip.in0, dropOne.outlet)
+    }
+
+  /**
    * Create a source which is throttled to a number of message per second.
    */
   def throttledSource(statsD: InetSocketAddress, delay: FiniteDuration, interval: FiniteDuration, numberOfMessages: Int, name: String): Source[Int, Unit] = {
