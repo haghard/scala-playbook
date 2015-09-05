@@ -57,7 +57,6 @@ libraryDependencies ++= Seq(
     "io.reactivex"        %% "rxscala"             % "0.25.0",
     "org.monifu"          %% "monifu"              % "1.0-M1",
     "log4j"               %  "log4j"               % "1.2.14",
-    //"org.scalaz.netty"    %% "scalaz-netty"        % "0.2.1",
     "org.scodec"          %% "scodec-stream"       % "0.10.0",
     "com.twitter"         %% "util-core"           % "6.23.0",
     "com.google.guava"    %  "guava"               % "18.0",
@@ -68,6 +67,7 @@ libraryDependencies ++= Seq(
     //"oncue.quiver"        %% "core"                % "3.2.0",
     //"oncue.quiver"        %% "core"                % "3.2.0",
     //"nl.mdj"              %% "itinere-core"        % "0.1",
+    //"org.scalaz.netty"    %% "scalaz-netty"        % "0.2.1",
     "com.ambiata"         %% "origami-core"             % Origami,
     "com.ambiata"         %% "origami-stream"           % Origami
 

@@ -3,17 +3,14 @@ package csv
 import java.util.concurrent.Executors._
 import java.util.concurrent.{ CountDownLatch, TimeUnit }
 
-import com.ambiata.origami.effect.{ FoldTask, SafeT, FinalizersException }
+import com.ambiata.origami.effect.{ SafeT, FinalizersException }
 import com.nrinaudo.csv.RowReader
 import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
 
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
 import scala.concurrent.SyncVar
-import scalaz.effect.IO
-import scalaz.stream.nio.file
 import scalaz.{ \/, -\/, \/- }
 import scalaz.concurrent.Task
 
@@ -24,15 +21,6 @@ class ScalaCsvSpec extends Specification {
   import com.ambiata.origami._, Origami._
 
   implicit val M = scalaz.Monoid[Int]
-
-  import scala.collection.JavaConversions.asScalaSet
-  /*val blackList = Set("x-JISAutoDetect", "ISO-2022-CN")
-    for {
-      cSet ← asScalaSet(Charset.availableCharsets().keySet())
-      if (!(blackList contains cSet))
-    } {
-      logger.debug(cSet + " -" + new String(raw.name.getBytes(cSet), Charset.forName(cName)))
-    }*/
 
   val P = scalaz.stream.Process
 
@@ -50,7 +38,7 @@ class ScalaCsvSpec extends Specification {
 
   def LoggerSink = scalaz.stream.sink.lift[Task, CvsLine] { line ⇒ Task.delay(logger.debug(line.toString)) }
 
-  def parser = new FoldM[scalaz.Id.Id, String, Vector[CvsLine]] {
+  def readBuffer = new FoldM[scalaz.Id.Id, String, Vector[CvsLine]] {
     type S = Vector[CvsLine]
     def start = Vector[CvsLine]()
     def fold = (state: S, current: String) ⇒ {
@@ -72,6 +60,37 @@ class ScalaCsvSpec extends Specification {
     }
     override val start: S = Logger.getLogger("logger")
     override def end(s: S): scalaz.Id.Id[Unit] = s.debug("Fold is competed")
+  }
+
+  def Log4jSinkIdLine: SinkM[scalaz.Id.Id, CvsLine] = new FoldM[scalaz.Id.Id, CvsLine, Unit] {
+    val name = "origami-fold-logger"
+    override type S = org.apache.log4j.Logger
+
+    override def fold = (state: S, elem: CvsLine) ⇒ {
+      state.debug(elem)
+      state
+    }
+    override val start: scalaz.Id.Id[Logger] =
+      Logger.getLogger(name)
+
+    override def end(s: S): scalaz.Id.Id[Unit] =
+      s.debug(s"$name is being competed")
+  }
+
+  def Log4jSinkTaskLine = new FoldM[SafeTTask, CvsLine, Unit] {
+    val name = "origami-fold-logger"
+    override type S = org.apache.log4j.Logger
+
+    override def fold = (state: S, elem: CvsLine) ⇒ {
+      state.debug(elem)
+      state
+    }
+
+    override def end(s: S): SafeTTask[Unit] =
+      SafeT.point[Task, Unit](s.debug(s"$name is being competed"))
+
+    override def start: SafeTTask[Logger] =
+      SafeT.point[Task, Logger](Logger.getLogger(name))
   }
 
   val list = List.iterate(0, 100)(_ + 1)
@@ -154,7 +173,7 @@ class ScalaCsvSpec extends Specification {
       val source = scala.io.Source.fromFile("./cvs/metal2pipes.csv")
 
       def readFold: Fold[String, (Int, Vector[CvsLine])] =
-        count[String] <*> (parser observe Log4jSink)
+        count[String] <*> (readBuffer observe Log4jSink)
 
       //SafeTIO
       def safeTask: SafeTTask[(Int, Vector[CvsLine])] =
@@ -177,11 +196,12 @@ class ScalaCsvSpec extends Specification {
   }
 
   "scalaz-stream-csv" should {
+    val Path = "./cvs/metal2pipes.csv"
 
     "read with fold" in {
       val latch = new CountDownLatch(1)
       val buffer = mutable.Buffer.empty[CvsLine]
-      val csvSource = rowsR[RawLine]("./cvs/metal2pipes.csv", ';')
+      val csvSource = rowsR[RawLine](Path, ';')
 
       val ReaderProcess = (csvSource map { raw ⇒
         val lenght = raw.lenght.replace(',', '.')
@@ -206,33 +226,32 @@ class ScalaCsvSpec extends Specification {
       import com.ambiata.origami.stream.FoldableProcessM._
 
       val latch = new CountDownLatch(1)
-      val source = rowsR[RawLine]("./cvs/metal2pipes.csv", ';').map { raw ⇒
+
+      val source = rowsR[RawLine](Path, ';').map { raw ⇒
         val lenght = raw.lenght.replace(',', '.')
         val diam = raw.diameter.replace(',', '.')
+        /*
+        import scala.collection.JavaConversions.asScalaSet
+        val blackList = Set("x-JISAutoDetect", "ISO-2022-CN")
+        for {
+          cSet ← asScalaSet(Charset.availableCharsets().keySet())
+          if (!(blackList contains cSet))
+        } {
+          logger.debug(cSet + " -" + new String(raw.name.getBytes(), Charset.forName(cSet)))
+        }
+        */
         CvsLine(raw.pipeId, raw.description, raw.name, raw.metalMark, diam.toDouble, lenght.toDouble)
       }
 
-      def Log4jSink2 = new FoldM[SafeTTask, String, Unit] {
-        val name = "Origami-fold-logger"
-        override type S = org.apache.log4j.Logger
+      def foldCsvLines2: FoldM[SafeTTask, CvsLine, (Int, Double)] =
+        ((count[CvsLine] observe Log4jSinkIdLine) <*> plusBy[CvsLine, Double](_.diameter)).into[SafeTTask]
 
-        override def fold = (state: S, elem: String) ⇒ {
-          state.debug(elem)
-          state
-        }
-
-        override def end(s: S): SafeTTask[Unit] =
-          SafeT.point[Task, Unit](s.debug(s"$name is being competed"))
-
-        override def start: SafeTTask[Logger] =
-          SafeT.point[Task, Logger](Logger.getLogger(name))
-      }
-
-      def foldCsvLines: FoldM[SafeTTask, CvsLine, Int] =
+      /*def foldCsvLines: FoldM[SafeTTask, CvsLine, Int] =
         (count[String].into[SafeTTask] observe Log4jSink2)
           .contramap[CvsLine](_.toString)
+      */
 
-      Task.fork((foldCsvLines run source).run)(E).runAsync {
+      Task.fork((foldCsvLines2 run source).run)(E).runAsync {
         case \/-(r) ⇒
           logger.debug(s"Fold result: $r")
           latch.countDown
