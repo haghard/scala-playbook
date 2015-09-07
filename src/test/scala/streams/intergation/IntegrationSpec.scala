@@ -222,7 +222,8 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
     }
   }
 
-   /*                                   +-----+
+  /*
+   *                                    +-----+
    *                                 +--|Sink1|
    *                                 |  +-----+
    * +----------+      +----------+  |  +-----+    +--------+
