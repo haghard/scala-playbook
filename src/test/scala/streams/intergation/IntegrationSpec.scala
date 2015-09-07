@@ -1,10 +1,11 @@
 package streams.intergation
 
+import akka.stream.actor.ActorSubscriberMessage.{ OnComplete, OnNext }
 import akka.stream.scaladsl._
-import akka.actor.{ Props, Actor, ActorRef, ActorSystem }
+import akka.actor.{ Props, ActorRef, ActorSystem }
 import akka.testkit.{ ImplicitSender, TestKit }
 import org.scalatest.concurrent.AsyncAssertions.Waiter
-import akka.stream.actor.{ ActorSubscriber, ActorPublisher }
+import akka.stream.actor.{ OneByOneRequestStrategy, ActorSubscriber, ActorPublisher }
 import akka.stream.{ Attributes, ActorMaterializer, ActorMaterializerSettings }
 import org.scalatest.{ BeforeAndAfterAll, BeforeAndAfterEach, MustMatchers, WordSpecLike }
 
@@ -36,15 +37,6 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
 
   val limit = 153
   val range = 0 to limit
-
-  def throttle[T](rate: FiniteDuration): Flow[T, T, Unit] = {
-    Flow() { implicit builder ⇒
-      import akka.stream.scaladsl.FlowGraph.Implicits._
-      val zip = builder.add(Zip[T, Unit.type]())
-      Source(rate, rate, Unit) ~> zip.in1
-      (zip.in0, zip.out)
-    }.map(_._1)
-  }
 
   "Scalaz-Streams toAkkaFlow" must {
     "run" in {
@@ -230,11 +222,15 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
     }
   }
 
-  /**
-   *
-   * +----------+      +----------+     +-----+   +--------+
-   * |Process   |------|AkkaSource|-----|Flow |---|AkkaSink|
-   * +----------+      +----------+     +-- --+   +--------+
+   /*                                   +-----+
+   *                                 +--|Sink1|
+   *                                 |  +-----+
+   * +----------+      +----------+  |  +-----+    +--------+
+   * |Process   |------|AkkaSource|-----|Flow |----|AkkaSink|
+   * +----------+      +----------+  |  +-----+    +--------+
+   *                                 |  +-----+
+   *                                 +__|Sink0|
+   *                                    +-----+
    *
    */
   "Scalaz-Stream process to AkkaSource through Flow to AkkaSink" must {
@@ -243,17 +239,48 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
       val sync = new SyncVar[Try[Int]]()
 
       val akkaSource = P.emitAll(range).toAkkaSource
-      val akkaSink = akka.stream.scaladsl.Sink.fold[Int, Int](0)(_ + _)
+      val foldSink = Sink.fold[Int, Int](0)(_ + _)
+
+      val actorSink0 = Sink.actorSubscriber(Props(new SlowingDownActor("DegradingActor0", 5l, 0l)))
+      val actorSink1 = Sink.actorSubscriber(Props(new SlowingDownActor("DegradingActor1", 7l, 0l)))
 
       val flow = Flow[Int].map { x ⇒ println(Thread.currentThread().getName); x * 2 }
         .withAttributes(Attributes.inputBuffer(initial = size * 2, max = size * 2))
 
-      FlowGraph.closed(akkaSource, akkaSink)((_, _)) { implicit b ⇒
+      FlowGraph.closed(akkaSource, foldSink)((_, _)) { implicit b ⇒
         import FlowGraph.Implicits._
-        (src, sink) ⇒ src ~> flow ~> sink
+        (src, sink) ⇒
+          val broadcast = b.add(Broadcast[Int](3))
+          src ~> broadcast ~> actorSink0
+          broadcast ~> actorSink1
+          broadcast ~> flow ~> sink
       }.run()._2.onComplete(r ⇒ sync.put(r))
 
       sync.get must be === Success(range.sum * 2)
+    }
+  }
+
+  class SlowingDownActor(name: String, delayPerMsg: scala.Long, initialDelay: scala.Long) extends ActorSubscriber {
+    private var delay = 0l
+    override protected val requestStrategy = OneByOneRequestStrategy
+
+    def this(name: String) {
+      this(name, 0l, 0l)
+    }
+
+    def this(name: String, delayPerMsg: Long) {
+      this(name, delayPerMsg, 0l)
+    }
+
+    override def receive: Receive = {
+      case OnNext(msg: Int) ⇒
+        println(s"${Thread.currentThread.getName}: $name $msg")
+        delay += delayPerMsg
+        Thread.sleep(initialDelay + (delay / 1000), delay % 1000 toInt)
+
+      case OnComplete ⇒
+        println("Complete DegradingActor")
+        context.system.stop(self)
     }
   }
 }

@@ -17,7 +17,7 @@ import scala.language.postfixOps
 
 import scala.concurrent.duration.FiniteDuration
 
-package object backpressure {
+package object streamTopologies {
 
   val dispCfg = ConfigFactory.parseString(
     """
@@ -329,18 +329,26 @@ package object backpressure {
     def withNext(current: Long) = this.copy(this.totalSamples + 1, this.sum + current)
   }
 
-  def every(interval: FiniteDuration): Flow[Long, Long, Unit] =
+  def every[T](interval: FiniteDuration): Flow[T, T, Unit] =
     Flow() { implicit b ⇒
       import FlowGraph.Implicits._
-      val zip = b.add(ZipWith[Long, Tick.type, Long](Keep.left).withAttributes(Attributes.inputBuffer(1, 1)))
-      val dropOne = b.add(Flow[Long].drop(1))
-
+      val zip = b.add(ZipWith[T, Tick.type, T](Keep.left).withAttributes(Attributes.inputBuffer(1, 1)))
+      val dropOne = b.add(Flow[T].drop(1))
       Source(Duration.Zero, interval, Tick) ~> zip.in1
       zip.out ~> dropOne.inlet
-
       (zip.in0, dropOne.outlet)
     }
 
+  /**
+   * Almost same as ``every``
+   */
+  def throttle[T](interval: FiniteDuration): Flow[T, T, Unit] =
+    Flow() { implicit builder ⇒
+      import akka.stream.scaladsl.FlowGraph.Implicits._
+      val zip = builder.add(Zip[T, Tick]().withAttributes(Attributes.inputBuffer(1, 1)))
+      Source(interval, interval, Tick()) ~> zip.in1
+      (zip.in0, zip.out)
+    }.map(_._1)
 
   /**
    * Split one upstream into 2 downstreams, filter on even/odd, merge

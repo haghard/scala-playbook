@@ -7,6 +7,7 @@ import scalaz.concurrent.Task
 import mongo.MongoProgram.NamedThreadFactory
 import scalaz.stream.{ sink, Process, Cause, async }
 import org.reactivestreams.{ Subscription, Subscriber, Publisher }
+import scalaz.concurrent.Strategy
 
 object ScalazProcessPublisher {
   def apply[T](source: Process[Task, T])(implicit ex: ExecutorService) =
@@ -42,9 +43,9 @@ class ScalazProcessPublisher[T] private (val source: Process[Task, T])(implicit 
   private val P = Process
   private val logger = Logger.getLogger("publisher")
   private val executor = newFixedThreadPool(4, new NamedThreadFactory("publisher-infrastructure"))
-  private val Strategy = scalaz.concurrent.Strategy.Executor(executor)
-  private val subscriptions = async.signalOf(Set[async.mutable.Queue[T]]())(Strategy)
-  private val subRequests = async.boundedQueue[Subscriber[_ >: T]](10)(Strategy)
+  private val Ex = Strategy.Executor(executor)
+  private val subscriptions = async.signalOf(Set[async.mutable.Queue[T]]())(Ex)
+  private val subRequests = async.boundedQueue[Subscriber[_ >: T]](10)(Ex)
 
   private def publish(a: T): Task[Unit] = for {
     qsList ← subscriptions.discrete.filter(s ⇒ s.nonEmpty).take(1).runLog
@@ -55,7 +56,7 @@ class ScalazProcessPublisher[T] private (val source: Process[Task, T])(implicit 
 
   private def subscribe0(subscriber: Subscriber[_ >: T]): Task[Process[Task, T]] = for {
     qs ← subscriptions.get
-    q = async.boundedQueue[T](1 << 5)(scalaz.concurrent.Strategy.Executor(ex))
+    q = async.boundedQueue[T](1 << 5)(Strategy.Executor(ex))
     updatedQs = qs + q
 
     result ← subscriptions.compareAndSet {
@@ -96,11 +97,11 @@ class ScalazProcessPublisher[T] private (val source: Process[Task, T])(implicit 
 
   private val writer = (source to sink.lift(publish)).drain.onComplete(finalizer)
 
-  override val flow = writer.merge(subRequests.dequeue.map { s ⇒
+  override val flow = (writer merge (subRequests.dequeue.map { s ⇒
     if (s eq null) s.onError(new NullPointerException("Null subscriber"))
     val subscription = secret(s, subscribe0(s).run)
     s.onSubscribe(subscription)
-  })(Strategy)
+  }))(Ex)
 
   flow.run.runAsync(_ ⇒ ())
 
@@ -110,8 +111,8 @@ class ScalazProcessPublisher[T] private (val source: Process[Task, T])(implicit 
   }
 
   private def secret(s: Subscriber[_ >: T], p: Process[Task, T]) = new Subscription {
-    private lazy val CSource = streams.io.chunkR(p)
-    private val requests = async.signalOf(-1)(scalaz.concurrent.Strategy.Executor(ex))
+    private lazy val source = streams.io.chunkR(p)
+    private val requests = async.signalOf(-1)(Strategy.Executor(ex))
 
     private val gracefulHalter: Cause ⇒ Process[Task, Unit] = {
       case cause @ Cause.End ⇒
@@ -131,10 +132,10 @@ class ScalazProcessPublisher[T] private (val source: Process[Task, T])(implicit 
 
     (for {
       size ← requests.discrete.filter(_ > -1)
-      _ ← (CSource chunk size) map { seq ⇒
-        seq.foreach(s.onNext(_))
-        if (size > seq.size) { //controversial behavior
-          logger.info(s"Requested $size - Received ${seq.size} ")
+      _ ← (source chunk size) map { batch ⇒
+        batch.foreach(s.onNext(_))
+        if (size > batch.size) { //controversial behavior
+          logger.info(s"Requested $size - Received ${batch.size} ")
           throw new Exception(streams.io.exitMessage)
         }
       }

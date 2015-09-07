@@ -2,7 +2,6 @@ package processes
 
 import org.scalacheck.Gen
 import org.apache.log4j.Logger
-import bytes.Bytes
 import scalaz.{ \/-, -\/, \/ }
 import scalaz.stream.Process._
 import scala.concurrent.SyncVar
@@ -11,7 +10,7 @@ import java.util.concurrent.Executors._
 import org.specs2.mutable.Specification
 import mongo.MongoProgram.NamedThreadFactory
 import scala.concurrent.forkjoin.ThreadLocalRandom
-import java.util.concurrent.{ TimeUnit }
+import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.{ FiniteDuration, Duration }
 
 import scalaz.stream._
