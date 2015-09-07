@@ -371,6 +371,29 @@ package object streamTopologies {
     }
 
   /**
+   * Fast sink and heartbeats sink.
+   * Sink's rate is equal to sum of 2 sources(original + heartbeat)
+   *
+   */
+  def scenario10: RunnableGraph[Unit] = {
+    FlowGraph.closed() { implicit b ⇒
+      import FlowGraph.Implicits._
+      val source = throttledSource(statsD, 1 second, 20 milliseconds, Int.MaxValue, "fastProducer10")
+      val sink = Sink.actorSubscriber(Props(classOf[DegradingActor], "timedSink10", statsD, 0l))
+      source ~> heartbeat(50.millis, 0) ~> sink
+    }
+  }
+
+  def heartbeat[T](interval: FiniteDuration, zero: T): Flow[T, T, Unit] =
+    Flow() { implicit builder =>
+      import FlowGraph.Implicits._
+      val heartbeats = builder.add(Source(interval, interval, zero))
+      val merge = builder.add(MergePreferred[T](1))
+      heartbeats ~> merge.in(0)
+      (merge.preferred, merge.out)
+    }
+
+  /**
    * Create a source which is throttled to a number of message per second.
    */
   def throttledSource(statsD: InetSocketAddress, delay: FiniteDuration, interval: FiniteDuration, numberOfMessages: Int, name: String): Source[Int, Unit] = {

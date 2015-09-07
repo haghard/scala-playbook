@@ -139,14 +139,14 @@ class ScalazProcessConcurrencyPatternSpec extends Specification {
    */
   def broadcastN[T](n: Int = 2, source: Process[Task, T], limit: Int = 10)(implicit S: scalaz.concurrent.Strategy): Process[Task, Seq[Process[Task, T]]] = {
     val queues = (0 until n) map (_ ⇒ async.boundedQueue[T](limit)(S))
-    val publisher = queues./:(source)((s, q) ⇒ s.observe(q.enqueue))
+    val broadcast = queues./:(source)((s, q) ⇒ s.observe(q.enqueue))
       .onComplete {
         Process.eval {
           logger.info("All input was scheduled.")
           Task.gatherUnordered(queues.map(_.close))
         }
       }
-    (publisher.drain merge P.emit(queues.map(_.dequeue)))(S)
+    (broadcast.drain merge P.emit(queues.map(_.dequeue)))(S)
   }
 
   "Broadcast single process for N output processes with degradation" should {
