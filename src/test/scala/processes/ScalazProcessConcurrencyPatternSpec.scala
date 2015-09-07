@@ -122,8 +122,8 @@ class ScalazProcessConcurrencyPatternSpec extends Specification {
         }
 
       val out: IndexedSeq[Map[String, Int]] =
-        (qWriter.drain merge scalaz.stream.merge.mergeN(mSize)(mappers)(S)
-          .foldMonoid)
+        (qWriter.drain merge scalaz.stream.merge.mergeN(mSize)(mappers)(S))
+          .foldMonoid[Map[String, Int]]
           .runLog.run
 
       out.size === 1
