@@ -9,7 +9,7 @@ class EventuateConcurrentVersionsSpec extends Specification {
     VectorTime("replica1" -> t1, "replica2" -> t2, "replica3" -> t3)
 
   "ConcurrentVersionsTree conflict" should {
-    "have resolved with first version" in {
+    "be resolved with first version" in {
       val append: (String, String) ⇒ String =
         (a, b) ⇒ if (a == null) b else s"$a-$b"
 
@@ -29,11 +29,13 @@ class EventuateConcurrentVersionsSpec extends Specification {
       cvt.all(0).value === "A-B-C"
       cvt.all(1).value === "A-D"
 
-      println(cvt.all)
-
       val merged = cvt.all.map(_.updateTimestamp).reduce(_ merge _) //vectorTime(1,1,1)
 
+      println(s"All: ${cvt.all}")
+      println(s"Merged: $merged")
+
       cvt.resolve(winner, merged)
+
       println(cvt.all)
       cvt.conflict === false
 

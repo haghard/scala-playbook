@@ -12,11 +12,9 @@ import scala.concurrent.forkjoin.{ ForkJoinPool, ThreadLocalRandom }
 import scala.concurrent.duration._
 
 class AtLeastEverySpec extends Specification {
-  private val logger = Logger.getLogger("atLeastEvery")
-
   val P = scalaz.stream.Process
-
   val executor = new ForkJoinPool(2)
+  private val logger = Logger.getLogger("atLeastEvery")
 
   val Scheduler = newScheduledThreadPool(1, new NamedThreadFactory("Scheduler"))
   val I = Strategy.Executor(newScheduledThreadPool(2, new NamedThreadFactory("infrastructure")))

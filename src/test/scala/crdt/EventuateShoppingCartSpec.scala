@@ -8,7 +8,6 @@ import org.scalacheck.Prop._
 import org.scalacheck.Properties
 
 import com.twitter.util.CountDownLatch
-import mongo.MongoProgram.NamedThreadFactory
 import scalaz.stream.{ Process, async }
 import scala.collection.concurrent.TrieMap
 
@@ -45,7 +44,7 @@ class EventuateShoppingCartSpec extends Properties("ShoppingCart") {
     val Writer = (ops to input.enqueue).drain.onComplete(Process.eval_(input.close))
 
     val RCore = Strategy.Executor(newFixedThreadPool(
-      Runtime.getRuntime.availableProcessors(), new NamedThreadFactory("r-core")))
+      Runtime.getRuntime.availableProcessors(), new RThreadFactory("r-core")))
     val replicator = replicatorChannelFor[RType, String](RCore)
 
     Writer.merge(

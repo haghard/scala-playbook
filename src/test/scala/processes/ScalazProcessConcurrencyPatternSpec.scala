@@ -20,8 +20,9 @@ class ScalazProcessConcurrencyPatternSpec extends Specification {
   val P = scalaz.stream.Process
   val logger = Logger.getLogger("proc-binding")
 
-  "Binding to asynchronous sources" should {
-    "non-deterministic interleave of both streams through merge/either" in {
+  "Interleave results" should {
+
+    "Non-deterministic interleave 2 streams through merge/either" in {
       implicit val strategy =
         Strategy.Executor(newFixedThreadPool(2, new NamedThreadFactory("io-worker")))
 
@@ -60,10 +61,8 @@ class ScalazProcessConcurrencyPatternSpec extends Specification {
 
       true should be equalTo true
     }
-  }
 
-  "Binding to asynchronous sources" should {
-    "Merges non-deterministically processes with mergeN" in {
+    "Non-deterministic interleave merge results with mergeN" in {
       val range = 0 until 50
       val ioExecutor = newFixedThreadPool(4, new NamedThreadFactory("io-executor"))
       val fanOutS = Strategy.Executor(newFixedThreadPool(1, new NamedThreadFactory("fan-out")))
@@ -80,12 +79,8 @@ class ScalazProcessConcurrencyPatternSpec extends Specification {
       val source: Process[Task, Process[Task, Int]] =
         emitAll(range) |> process1.lift(resource)
 
-      merge.mergeN(source)(fanOutS).fold(0) { (a, b) ⇒
-        val r = a + b
-        logger.info(s"Current sum: $r")
-        r
-      }.runLog.runAsync(sync.put)
-
+      import scalaz.std.AllInstances._
+      merge.mergeN(source)(fanOutS).foldMonoid.runLog.runAsync(sync.put)
       sync.get should be equalTo \/-(IndexedSeq(sum))
     }
   }
@@ -259,6 +254,39 @@ class ScalazProcessConcurrencyPatternSpec extends Specification {
         .onComplete { P.eval(Task.delay(logger.debug(s"Process [symbol-count] has been completed"))) }
         .runLog.run
       1 === 1
+    }
+  }
+
+  def mergeSorted[T: Ordering](left: List[T], right: List[T])(implicit ord: Ordering[T]): List[T] = {
+    val source0 = emitAll(left)
+    val source1 = emitAll(right)
+
+    def choose(l: T, r: T): Tee[T, T, T] =
+      if (ord.lt(l, r)) emit(l) ++ nextL(r)
+      else emit(r) ++ nextR(l)
+
+    def nextR(l: T): Tee[T, T, T] =
+      tee.receiveROr[T, T, T](emit(l) ++ tee.passL)(r ⇒ choose(l, r))
+
+    def nextL(r: T): Tee[T, T, T] =
+      tee.receiveLOr[T, T, T](emit(r) ++ tee.passR)(l ⇒ choose(l, r))
+
+    def init: Tee[T, T, T] =
+      tee.receiveLOr[T, T, T](tee.passR)(nextR)
+
+    (source0 tee source1)(init).toSource.runLog.run.toList
+  }
+
+  "MergeSort deterministically 2 sorted list" should {
+    "run" in {
+      val left = Gen.listOf(Gen.choose(0, 50)).map(_.sorted).sample.getOrElse(Nil)
+      val right = Gen.listOf(Gen.choose(0, 50)).map(_.sorted).sample.getOrElse(Nil)
+      println(left)
+      println(right)
+
+      val result = mergeSorted(left, right)
+      println(result)
+      result should be equalTo (left ::: right).sorted
     }
   }
 

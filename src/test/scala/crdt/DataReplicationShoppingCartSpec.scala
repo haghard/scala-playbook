@@ -2,8 +2,6 @@ package crdt
 
 import java.util.concurrent.Executors._
 import com.twitter.util.CountDownLatch
-import mongo.MongoProgram.NamedThreadFactory
-
 import org.scalacheck.Prop._
 import org.scalacheck.{ Gen, Properties }
 
@@ -28,7 +26,7 @@ class DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCart
       type RType[T] = akka.contrib.datareplication.ORSet[T]
 
       val RCore = Strategy.Executor(newFixedThreadPool(Runtime.getRuntime.availableProcessors(),
-        new NamedThreadFactory("r-core")))
+        new RThreadFactory("r-core")))
 
       val input = async.boundedQueue[String](Size)(R)
       val replicas = async.boundedQueue[Int](Size)(R)

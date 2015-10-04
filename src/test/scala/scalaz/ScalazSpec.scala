@@ -317,10 +317,10 @@ class ScalazSpec extends Specification {
       } yield size
 
       val sId = Free.runFC(program)(EvaluatorLogic.~>[Id])
-      val sTask = Free.runFC(program)(EvaluatorLogic.~>[Task]).run
+      val results = Free.runFC(program)(EvaluatorLogic.~>[Task]).run
 
       sId === expected
-      sTask === expected
+      results === expected
     }
   }
 }

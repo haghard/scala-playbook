@@ -385,7 +385,7 @@ package object streamTopologies {
   }
 
   def heartbeat[T](interval: FiniteDuration, zero: T): Flow[T, T, Unit] =
-    Flow() { implicit builder =>
+    Flow() { implicit builder ⇒
       import FlowGraph.Implicits._
       val heartbeats = builder.add(Source(interval, interval, zero))
       val merge = builder.add(MergePreferred[T](1))

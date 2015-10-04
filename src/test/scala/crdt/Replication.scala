@@ -1,13 +1,14 @@
 package crdt
 
 import java.util.concurrent.Executors._
+import java.util.concurrent.ThreadFactory
+import java.util.concurrent.atomic.AtomicInteger
 
 import scalaz.stream.async
 import scala.language.higherKinds
 import org.scalacheck.{ Arbitrary, Gen }
 import scala.collection.concurrent.TrieMap
 import scalaz.concurrent.{ Task, Strategy }
-import mongo.MongoProgram.NamedThreadFactory
 import scalaz.stream.async.mutable.{ Signal, Queue }
 
 object Replication {
@@ -20,7 +21,7 @@ object Replication {
 
   //optimal size is equal to the number of replica
   val R = Strategy.Executor(newFixedThreadPool(Runtime.getRuntime.availableProcessors() / 2,
-    new NamedThreadFactory("worker")))
+    new RThreadFactory("worker")))
 
   /*"VectorTime" should {
     "have detected concurrent versions" in {
@@ -29,6 +30,15 @@ object Replication {
       r0 === r1 //true
     }
   }*/
+
+  final class RThreadFactory(var name: String) extends ThreadFactory {
+    private def namePrefix = name + "-thread"
+    private val threadNumber = new AtomicInteger(1)
+    private val group: ThreadGroup = Thread.currentThread().getThreadGroup
+
+    override def newThread(r: Runnable) = new Thread(this.group, r,
+      s"$namePrefix-${threadNumber.getAndIncrement()}", 0L)
+  }
 
   def genBoundedList[T](size: Int, g: Gen[T]): Gen[List[T]] = Gen.listOfN(size, g)
 

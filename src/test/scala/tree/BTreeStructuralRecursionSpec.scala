@@ -22,11 +22,13 @@ class BTreeStructuralRecursionSpec extends Specification {
 
   "Tree" should {
     "has been foldLeft/invert/foldLeft properly" in {
-      val tree = node(4,
-        node(2,
-          node(3)
-        ),
-        node(7, node(6), node(9)
+      val tree =
+        node(4,
+          node(2,
+            node(3)
+          ),
+          node(7,
+            node(6), node(9)
         )
       )
 
@@ -125,11 +127,11 @@ class BTreeStructuralRecursionSpec extends Specification {
       m === 15
     }
   }
+*/
+
 
   sealed trait Tree[+T]
-
   case object Leaf extends Tree[Nothing]
-
   case class Node[T](value: T, left: Tree[T], right: Tree[T]) extends Tree[T]
 
   object tree extends Foldable0[Tree] {
@@ -210,22 +212,19 @@ class BTreeStructuralRecursionSpec extends Specification {
       case Leaf                                  ⇒ None
       case Node(v, left, right) if searched == v ⇒ Option(v)
       case Node(v, left, right) ⇒
-        if (ord.lt(searched, v)) {
-          scan(searched, left)
-        } else {
-          scan(searched, right)
-        }
+        if (ord lt (searched, v)) scan(searched, left)
+        else scan(searched, right)
     }
 
-    private def maximum0(v: T, t: Tree[T]): T = t match {
+    private def loop(v: T, t: Tree[T]): T = t match {
       case Leaf ⇒ v
       case Node(v, left, right) ⇒
-        val l = maximum0(v, left)
-        val r = maximum0(v, right)
-        if (ord.lt(l, r)) r else l
+        val l = loop(v, left)
+        val r = loop(v, right)
+        if (ord lt(l, r)) r else l
     }
 
-    def maximum: T = maximum0(null.asInstanceOf[T], self)
+    def maximum: T = loop(null.asInstanceOf[T], self)
 
     def search(searched: T): Option[T] =
       scan(searched, self)
