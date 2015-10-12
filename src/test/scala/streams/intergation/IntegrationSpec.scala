@@ -181,9 +181,9 @@ class IntegrationSpec extends TestKit(ActorSystem("integration"))
         import FlowGraph.Implicits._
         val bcast = b.add(Broadcast[Int](3))
         src ~> bcast.in
-        bcast.out(0) ~> Flow[Int].filter { _ % 2 != 0 } ~> odd
-        bcast.out(1) ~> Flow[Int].filter { _ % 2 == 0 } ~> even
-        bcast.out(2) ~> Flow[Int].filter { isPrime } ~> prime
+        bcast ~> Flow[Int].filter { _ % 2 != 0 } ~> odd
+        bcast ~> Flow[Int].filter { _ % 2 == 0 } ~> even
+        bcast ~> Flow[Int].filter { isPrime } ~> prime
       }.run
 
       evenR.reader[Int].map { x ⇒

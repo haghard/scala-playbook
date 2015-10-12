@@ -1,6 +1,5 @@
 package processes
 
-import org.scalacheck.Gen
 import org.specs2.mutable.Specification
 
 import scala.collection.mutable
@@ -19,13 +18,13 @@ class GeneralsSpec extends Specification {
       (for {
         o ← naturals.take(2)
         r ← (emitW("Incoming value: " + o) ++ emitO(o))
-          .drainW(io.fillBuffer(strOut))
+          .observeW(io.fillBuffer(strOut))
       } yield (r)).runLog.run
 
       (for {
         o ← naturals.take(5)
         r ← (emitW("Incoming value: " + o) ++ emitO(o))
-          .drainO(io.fillBuffer(intOut))
+          .observeO(io.fillBuffer(intOut))
       } yield (r)).runLog.run
 
       val a = mutable.Buffer[Int](1, 2, 3, 4, 5)

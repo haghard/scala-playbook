@@ -82,8 +82,7 @@ object io {
         r
       }
 
-      @tailrec
-      def fetchBuffer(n: Int, acc: Int): Unit = {
+      @tailrec def fetchBuffer(n: Int, acc: Int): Unit = {
         if (cur.isHalt) ()
         else if (n > acc) {
           step()
@@ -94,15 +93,14 @@ object io {
 
       override def foreach[U](f: I ⇒ U): Unit = go(p, f)
 
-      @tailrec
-      def step(): Unit = {
+      @tailrec def step(): Unit = {
         cur.step match {
           case h @ Halt(End | Kill)                ⇒ cur = h
           case h @ Halt(Cause.Error(e: Exception)) ⇒ cur = h
           case Step(Emit(as), cont) ⇒
             buffer = buffer ++ as
             cur = cont.continue
-          case Step(Await(req, rcv), next) ⇒
+          case Step(Await(req, rcv, _), next) ⇒
             //Evaluate req
             val res = EarlyCause.fromTaskResult(req.attempt.run)
             //Transition to the next state
@@ -111,13 +109,12 @@ object io {
         }
       }
 
-      @tailrec
-      def go[U](p: Process[Task, I], f: I ⇒ U): Unit = {
+      @tailrec def go[U](p: Process[Task, I], f: I ⇒ U): Unit = {
         p.step match {
           case Step(Emit(os), cont) ⇒
             os.foreach(f)
             go(cont.continue, f)
-          case Step(Await(req, rcv), cont) ⇒
+          case Step(Await(req, rcv, _), cont) ⇒
             val res = EarlyCause.fromTaskResult(req.attempt.run)
             go(Try(rcv(res).run) +: cont, f)
           case Halt(rsn) ⇒

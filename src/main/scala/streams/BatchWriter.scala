@@ -30,7 +30,7 @@ class BatchWriter[T] extends ActorPublisher[T] with ActorLogging {
   override def receive: Receive = {
     case WriterDone ⇒
       while (bufferSize > 0) {
-        onNext(buffer.dequeue())
+        onNext(buffer.dequeue)
         bufferSize -= 1
       }
       if (buffer.size == 0) {
@@ -44,6 +44,7 @@ class BatchWriter[T] extends ActorPublisher[T] with ActorLogging {
       if (active) {
         if (bufferSize < pubSubGap) {
           r.cb(\/-(r.i))
+          log.info("enqueue: {}", r.i)
           buffer.enqueue(r.i)
           bufferSize += 1
         } else {
@@ -56,6 +57,7 @@ class BatchWriter[T] extends ActorPublisher[T] with ActorLogging {
       }
 
     case Request(n) if (isActive && totalDemand > 0) ⇒
+      log.info("request: {}", n)
       pubSubGap += n
 
       //notify outSide producer
@@ -76,13 +78,11 @@ class BatchWriter[T] extends ActorPublisher[T] with ActorLogging {
   }
 
   final def deliverBatch(): Unit = {
-    @tailrec
-    def loop(bs: Long, gap: Long): (Long, Long) = {
+    @tailrec def loop(bs: Long, gap: Long): (Long, Long) =
       if (bs > 0) {
         onNext(buffer.dequeue())
         loop(bs - 1, gap - 1)
       } else (bs, gap)
-    }
 
     val (b, g) = loop(bufferSize, pubSubGap)
     bufferSize = b

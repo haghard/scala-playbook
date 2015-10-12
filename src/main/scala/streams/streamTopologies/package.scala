@@ -17,9 +17,9 @@ import scala.language.postfixOps
 
 import scala.concurrent.duration.FiniteDuration
 
-package object streamTopologies {
+package object streamRepertoires {
 
-  val dispCfg = ConfigFactory.parseString(
+  val config = ConfigFactory.parseString(
     """
       |akka {
       |  flow-dispatcher {
@@ -393,6 +393,40 @@ package object streamTopologies {
       (merge.preferred, merge.out)
     }
 
+  //Detached flows with conflate + conflate
+  def scenario11: RunnableGraph[Unit] = {
+    val srcSlow = throttledSource(statsD, 1 second, 1000 milliseconds, Int.MaxValue, "slowProducer11")
+      .conflate(identity)(_ + _)
+
+    val srcFast = throttledSource(statsD, 1 second, 200 milliseconds, Int.MaxValue, "fastProducer11")
+      .conflate(identity)(_ + _)
+
+    FlowGraph.closed() { implicit b ⇒
+      import FlowGraph.Implicits._
+      val zip = b.add(Zip[Int, Int].withAttributes(Attributes.inputBuffer(1, 1)))
+      srcFast ~> zip.in0
+      srcSlow ~> zip.in1
+      zip.out ~> Sink.actorSubscriber(Props(classOf[DegradingActor], "sink11", statsD, 0l))
+    }
+  }
+
+  //Detached flows with expand + conflate
+  def scenario12: RunnableGraph[Unit] = {
+    val srcSlow = throttledSource(statsD, 1 second, 1000 milliseconds, Int.MaxValue, "slowProducer12")
+      .expand(identity)(r => (r + r, r))
+
+    val srcFast = throttledSource(statsD, 1 second, 200 milliseconds, Int.MaxValue, "fastProducer12")
+      .conflate(identity)(_ + _)
+
+    FlowGraph.closed() { implicit b ⇒
+      import FlowGraph.Implicits._
+      val zip = b.add(Zip[Int, Int].withAttributes(Attributes.inputBuffer(1, 1)))
+      srcFast ~> zip.in0
+      srcSlow ~> zip.in1
+      zip.out ~> Sink.actorSubscriber(Props(classOf[DegradingActor], "sink12", statsD, 0l))
+    }
+  }
+
   /**
    * Create a source which is throttled to a number of message per second.
    */
@@ -526,6 +560,10 @@ class DegradingActor(val name: String, val statsD: InetSocketAddress, delayPerMs
       Thread.sleep(initialDelay + (delay / 1000), delay % 1000 toInt)
       notifyStatsD(s"$name:1|c")
 
+    case OnNext(msg: (Int, Int)) ⇒
+      println(msg)
+      notifyStatsD(s"$name:1|c")
+
     case OnComplete ⇒
       println(s"Complete DegradingActor")
       context.system.stop(self)
@@ -533,11 +571,10 @@ class DegradingActor(val name: String, val statsD: InetSocketAddress, delayPerMs
 }
 
 class BatchActor(name: String, val statsD: InetSocketAddress, delay: Long, bufferSize: Int) extends ActorSubscriber with StatsD {
-
   private val queue = new mutable.Queue[Int]
 
-  override protected val requestStrategy: RequestStrategy = new MaxInFlightRequestStrategy(bufferSize) {
-    override val inFlightInternally = queue.size
+  override protected val requestStrategy  = new MaxInFlightRequestStrategy(bufferSize) {
+    override def inFlightInternally = queue.size
   }
 
   def this(name: String, statsD: InetSocketAddress, bufferSize: Int) {

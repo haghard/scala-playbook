@@ -52,8 +52,8 @@ resolvers += Resolver.url("ambiata-oss", new URL("https://ambiata-oss.s3.amazona
 
 libraryDependencies ++= Seq(
     "org.mongodb"         %  "mongo-java-driver"   %  "3.0.2"  withSources(),
-    "org.scalaz.stream"   %% "scalaz-stream"       %  "0.7.3a"    withSources(),
-    "com.typesafe.akka"   %% "akka-actor"          %    Akka      withSources(),
+    "org.scalaz.stream"   %% "scalaz-stream"       %  "0.8"    withSources(), //"0.7.3a"
+    "com.typesafe.akka"   %% "akka-actor"          %    Akka   withSources(),
     "com.typesafe.akka"   %% "akka-testkit"        %    Akka,
     "com.typesafe.akka"   %% "akka-stream-experimental" % "1.0",
     "io.reactivex"        %% "rxscala"             % "0.25.0",
@@ -64,13 +64,13 @@ libraryDependencies ++= Seq(
     "com.google.guava"    %  "guava"               % "18.0",
     "com.rbmhtechnology"  %% "eventuate"           % "0.3",
     "com.github.patriknw" %% "akka-data-replication" % "0.11",
-    "com.nrinaudo"        %% "scalaz-stream-csv"   % "0.1.3",
+    //"com.nrinaudo"        %% "scalaz-stream-csv"   % "0.1.3",
     "com.twitter"         %% "scalding-core"      % "0.15.0",
     //"au.com.langdale"     %% "flowlib"             % "0.9"
-    "oncue.quiver"        %% "core"                % "3.2.1",
+    "oncue.quiver"        %% "core"                % "3.2.1"
     //"org.scalaz.netty"    %% "scalaz-netty"        % "0.2.1",
-    "com.ambiata"         %% "origami-core"             % Origami,
-    "com.ambiata"         %% "origami-stream"           % Origami
+    //"com.ambiata"         %% "origami-core"             % Origami,
+    //"com.ambiata"         %% "origami-stream"           % Origami
     //"com.haghard"         %% "nosql-join-stream"    % "0.0.1"
 )
 

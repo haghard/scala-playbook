@@ -1,7 +1,7 @@
 package scalding
 
 import org.specs2.mutable.Specification
-import com.twitter.algebird.{Monoid => TwitterMonoid}
+import com.twitter.algebird.{ Monoid ⇒ TwitterMonoid }
 
 class ScaldingSpec extends Specification {
   val log = org.apache.log4j.Logger.getLogger("scalding")
@@ -30,8 +30,8 @@ class ScaldingSpec extends Specification {
       val y = "qwerty1".toSet
 
       val hasher = new com.twitter.algebird.MinHasher32(1.0, 1024)
-      val sig0 = x.map(elem => hasher.init(elem.toString)).reduce(hasher.plus(_, _))
-      val sig1 = y.map(elem => hasher.init(elem.toString)).reduce(hasher.plus(_, _))
+      val sig0 = x.map(elem ⇒ hasher.init(elem.toString)).reduce(hasher.plus(_, _))
+      val sig1 = y.map(elem ⇒ hasher.init(elem.toString)).reduce(hasher.plus(_, _))
 
       val hs = hasher.similarity(sig0, sig1)
       //hs === approxSimilarity(hasher, x, y)
@@ -42,8 +42,8 @@ class ScaldingSpec extends Specification {
 
   "Levels of followers" should {
     "run" in {
-      val graph = FollowersGraph(Set(('E, 'B), ('F,'C), ('F,'D), ('G, 'D), ('G, 'F), ('B,'A), ('C,'A), ('D,'A)))
-      val users = List('A,'B,'C,'D,'E,'F,'G).map(name => (name, Set(name))).toMap
+      val graph = FollowersGraph(Set(('E, 'B), ('F, 'C), ('F, 'D), ('G, 'D), ('G, 'F), ('B, 'A), ('C, 'A), ('D, 'A)))
+      val users = List('A, 'B, 'C, 'D, 'E, 'F, 'G).map(name ⇒ (name, Set(name))).toMap
 
       val firstFollowers = (graph propagate users)
       val secondFollowers = (graph propagate firstFollowers)
@@ -59,8 +59,8 @@ class ScaldingSpec extends Specification {
   "Scalding's aggregators" should {
     "run" in {
       import com.twitter.algebird.Aggregator.{ max, min, approximatePercentile, uniqueCount, approximateUniqueCount }
-      val seq = Seq.range(1,100)
-      (max[Int] join min[Int] join approximatePercentile[Int](0.9, 10))(seq) === ((99,1),89.0)
+      val seq = Seq.range(1, 100)
+      (max[Int] join min[Int] join approximatePercentile[Int](0.9, 10))(seq) === ((99, 1), 89.0)
       (uniqueCount[Int] join approximateUniqueCount[Int])(seq) === (99, 99)
     }
   }

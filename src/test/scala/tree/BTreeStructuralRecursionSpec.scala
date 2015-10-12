@@ -20,6 +20,23 @@ class BTreeStructuralRecursionSpec extends Specification {
 
   private val logger = Logger.getLogger("btree")
 
+  "Btree" should {
+    "maximum" in {
+      var t = node(5)
+      t = t :+ 4
+      t = t :+ 10
+      t = t :+ 11
+      t = t :+ 3
+      t = t :+ 9
+      t = t :+ 15
+
+      t.prettyPrint
+
+      1 === 1
+    }
+  }
+
+  /*
   "Tree" should {
     "has been foldLeft/invert/foldLeft properly" in {
       val tree =
@@ -127,9 +144,7 @@ class BTreeStructuralRecursionSpec extends Specification {
       m === 15
     }
   }
-*/
-
-
+  */
   sealed trait Tree[+T]
   case object Leaf extends Tree[Nothing]
   case class Node[T](value: T, left: Tree[T], right: Tree[T]) extends Tree[T]
@@ -221,7 +236,7 @@ class BTreeStructuralRecursionSpec extends Specification {
       case Node(v, left, right) ⇒
         val l = loop(v, left)
         val r = loop(v, right)
-        if (ord lt(l, r)) r else l
+        if (ord lt (l, r)) r else l
     }
 
     def maximum: T = loop(null.asInstanceOf[T], self)
@@ -237,6 +252,24 @@ class BTreeStructuralRecursionSpec extends Specification {
         Node(a, left :+ inserted, right)
       case (inserted, Node(a, left, right)) if ord.gt(inserted, a) ⇒
         Node(a, left, right :+ inserted)
+    }
+
+    def prettyPrint: Unit = {
+      def printHelper(pad: String, e: T, t: Tree[T]): Unit = {
+        t match {
+          case Leaf ⇒
+            System.out.println(s"$pad$e")
+          case Node(v, Leaf, Leaf) ⇒
+            //System.out.println(s"$pad+-\\")
+            printHelper(pad + "| ", v, Leaf)
+            printHelper(pad + "  ", v, Leaf)
+          case Node(v, l, r) ⇒
+            System.out.println(s"$pad+-\\")
+            printHelper(pad + "| ", v, l)
+            printHelper(pad + "  ", v, r)
+        }
+      }
+      printHelper("", null.asInstanceOf[T], self)
     }
   }
 }

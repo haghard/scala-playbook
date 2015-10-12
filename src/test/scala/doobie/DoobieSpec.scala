@@ -101,7 +101,7 @@ class DoobieSpec extends Specification with Mockito {
     }
   }
 
-  val list = List(Country("RUS", "Russia", 146270), Country("USA", "United States of America", 320480))
+  val list = Vector(Country("RUS", "Russia", 146270), Country("USA", "United States of America", 320480))
 
   "Doobie h2 in memory db streaming thought process" in new Environment {
     val xa = doobie.util.transactor.DriverManagerTransactor[Task](
@@ -114,12 +114,14 @@ class DoobieSpec extends Specification with Mockito {
       .process
       .transact(xa)
 
-    p.runLog.run should be equalTo list.toIndexedSeq
+    p.runLog.run should be equalTo list
   }
 
   "Doobie run H2Transactor uses backed JdbcConnectionPool" in new Environment {
     import doobie.imports._, scalaz._, scalaz.concurrent.Task
     import doobie.contrib.h2.h2transactor._
+
+    val list = List(Country("RUS", "Russia", 146270), Country("USA", "United States of America", 320480))
 
     val q = sql"SELECT * FROM country".query[Country].list
 

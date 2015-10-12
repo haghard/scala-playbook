@@ -6,17 +6,18 @@ import scalaz.{ \/-, -\/, \/ }
 import scalaz.stream.Process._
 import scala.concurrent.SyncVar
 import scala.collection.IndexedSeq
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.Executors._
 import org.specs2.mutable.Specification
 import mongo.MongoProgram.NamedThreadFactory
 import scala.concurrent.forkjoin.ThreadLocalRandom
-import java.util.concurrent.TimeUnit
+
 import scala.concurrent.duration.{ FiniteDuration, Duration }
 
 import scalaz.stream._
 import scalaz.concurrent.{ Strategy, Task }
 
-class ScalazProcessConcurrencyPatternSpec extends Specification {
+class ScalazProcessRepertoires extends Specification {
   val P = scalaz.stream.Process
   val logger = Logger.getLogger("proc-binding")
 
@@ -134,10 +135,10 @@ class ScalazProcessConcurrencyPatternSpec extends Specification {
    */
   def broadcastN[T](n: Int = 2, source: Process[Task, T], limit: Int = 10)(implicit S: scalaz.concurrent.Strategy): Process[Task, Seq[Process[Task, T]]] = {
     val queues = (0 until n) map (_ ⇒ async.boundedQueue[T](limit)(S))
-    val broadcast = queues./:(source)((s, q) ⇒ s.observe(q.enqueue))
+    val broadcast = queues./:(source)((src, q) ⇒ src.observe(q.enqueue))
       .onComplete {
         Process.eval {
-          logger.info("All input was scheduled.")
+          logger.info("All input was scheduled")
           Task.gatherUnordered(queues.map(_.close))
         }
       }
@@ -287,6 +288,59 @@ class ScalazProcessConcurrencyPatternSpec extends Specification {
       val result = mergeSorted(left, right)
       println(result)
       result should be equalTo (left ::: right).sorted
+    }
+  }
+
+  "Back-pressure Fast producer slow consumer" should {
+    "dropLast/dropBuffer from the buffer to avoid blocking" in {
+      def sleep(latency: Long) = Process.repeatEval(Task.delay(Thread.sleep(latency)))
+
+      val waterMark = 1 << 4
+      implicit val Pub = newSingleThreadExecutor(new NamedThreadFactory("producer"))
+      implicit val Sub = Strategy.Executor(newFixedThreadPool(3, new NamedThreadFactory("consumer")))
+
+      val buffer = async.boundedQueue[Int](waterMark + 5)(Sub)
+
+      val sinkP = process1.lift[Int, Int] { x ⇒ logger.debug(s"<~ Consumed: $x"); x }
+      val dropLast = process1.lift[Int, Int] { x ⇒ logger.debug(s"~> Dropped: $x"); x }
+      val dropBuffer = process1.lift[Seq[Int], Int] { seq ⇒ logger.debug(s"~> Dropped buffer: $seq"); 0 }
+      val enqueueP = process1.lift[(Int, Unit), Unit] { x ⇒ (buffer enqueueOne (x._1) run) }
+
+      val sink = (buffer.dequeue zip sleep(300)).map(_._1) pipe sinkP
+
+      val dropLastStrategy = (buffer.size.discrete.filter(_ > waterMark) zip buffer.dequeue).map(_._2) |> dropLast
+      val dropBufferStrategy = (buffer.size.discrete.filter(_ > waterMark) zip buffer.dequeueBatch(waterMark)).map(_._2) |> dropBuffer
+
+      Task.fork {
+        ((Process.emitAll(1 to 200) zip sleep(200)) |> enqueueP).onComplete(Process.eval_(buffer.close)).run[Task]
+      }(Pub).runAsync(_ ⇒ ())
+
+      merge.mergeN(Process(sink, dropLastStrategy))(Sub).runLog.run
+      //(src merge merge.mergeN(Process(sink, throttler))).runLog.run
+      1 === 1
+    }
+  }
+
+  "Back-pressure Fast producer slow consumer" should {
+    "circularBuffer silently overrides values to avoid blocking" in {
+      def sleep(latency: Long) = Process.repeatEval(Task.delay(Thread.sleep(latency)))
+
+      val waterMark = 1 << 4
+      implicit val Pub = newSingleThreadExecutor(new NamedThreadFactory("producer"))
+      implicit val Sub = Strategy.Executor(newFixedThreadPool(2, new NamedThreadFactory("consumer")))
+
+      val cBuffer = async.circularBuffer[Int](waterMark)(Sub)
+      val consumeP = process1.lift[Int, Int] { x ⇒ logger.debug(s"<~ Consumed: $x"); x }
+      val publishP = process1.lift[(Int, Unit), Unit] { x ⇒ (cBuffer enqueueOne (x._1) run) }
+
+      val sink = (cBuffer.dequeue zip sleep(300)).map(_._1) pipe consumeP
+
+      Task.fork {
+        ((Process.emitAll(1 to 200) zip sleep(150)) |> publishP).onComplete(Process.eval_(cBuffer.close)).run[Task]
+      }(Pub).runAsync(_ ⇒ ())
+
+      sink.runLog.run
+      1 === 1
     }
   }
 

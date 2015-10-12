@@ -35,7 +35,7 @@ class ActorStreamIntegrationSpec extends TestKit(ActorSystem("Integration"))
   val P = Process
 
   //Mutable state lives here
-  def actorChannel = actor(new Act {
+  def akkaActor = actor(new Act {
     private var history = List[Int]()
     become {
       case x: Int ⇒
@@ -114,7 +114,7 @@ class ActorStreamIntegrationSpec extends TestKit(ActorSystem("Integration"))
     "with ask pattern" in {
       val range = 0 until 15
 
-      val ch = actorChannel
+      val actorRef = akkaActor
 
       val Source: Process[Task, Int] = for {
         p ← P.emitAll(range)
@@ -123,21 +123,21 @@ class ActorStreamIntegrationSpec extends TestKit(ActorSystem("Integration"))
 
       val results = mutable.Buffer.empty[String]
 
-      (Source through ch.akkaChannel[Int, String]() observe scalaz.stream.io.stdOutLines to scalaz.stream.io.fillBuffer(results))
+      (Source through actorRef.akkaChannel[Int, String]() observe scalaz.stream.io.stdOutLines to scalaz.stream.io.fillBuffer(results))
         .onFailure { ex ⇒ println("Error: " + ex.getMessage); P.halt }
         .onComplete(P.eval(Task.delay(println("Complete..."))))
         .runLog.run
 
       results.toList must be === range.map(s ⇒ Integer.toHexString(s.hashCode())).toList
 
-      ch ! 'Entry
+      actorRef ! 'Entry
       expectMsg(range.toList)
     }
   }
 
   "Scalaz-Streams integration with akka actors" must {
     "wrong out type" in {
-      val ch = actorChannel
+      val ch = akkaActor
       val range = 0 until 2
       val r = new SyncVar[String]
 
