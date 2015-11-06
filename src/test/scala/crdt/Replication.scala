@@ -82,7 +82,7 @@ object Replication {
     def run(collector: TrieMap[Int, Set[T]]): Task[Unit] =
       input.dequeue.flatMap { action ⇒
         //shouldn't be linearizable !!!!!!!!!!!!!!!!!!!!
-        P.eval(replicationChannel.compareAndSet(c ⇒ Some(converge(action, c.get))))
+        P.eval(replicationChannel compareAndSet (c ⇒ Some(converge(action, c.get))))
         /*zip P.eval(replicator.get))
           .map(out ⇒ LoggerI.info(s"Replica:$numR Order:${out._2.value} VT:[${out._2.versionedEntries}] Local-VT:[$localTime]"))*/
       }.onComplete(P.eval(Task.now(collector += num -> elements(replicationChannel.get.run))))
@@ -101,6 +101,6 @@ object Replication {
   implicit val evenSet = com.rbmhtechnology.eventuate.crdt.ORSet[String]()
   implicit val akkaSet = akka.contrib.datareplication.ORSet.empty[String]
 
-  def replicatorChannelFor[F[_], T](S: Strategy)(implicit zero: F[T]) =
+  def replicationChannelFor[F[_], T](S: Strategy)(implicit zero: F[T]) =
     async.signalOf[F[T]](zero)(S)
 }

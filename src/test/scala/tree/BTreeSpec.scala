@@ -148,8 +148,7 @@ object BTree extends Foldable0[BTree] {
   private[BTree] def apply[T](value: T, left: Option[BTree[T]], right: Option[BTree[T]]) =
     new BTree[T](value, left, right)
 
-  @annotation.tailrec
-  private[BTree] def loop[T, A](tree: Option[BTree[T]], rest: List[Option[BTree[T]]], f: T ⇒ A, m: (A, ⇒ A) ⇒ A, acc: A): A = {
+  @tailrec def loop[T, A](tree: Option[BTree[T]], rest: List[Option[BTree[T]]], f: T ⇒ A, m: (A, ⇒ A) ⇒ A, acc: A): A = {
     tree match {
       case Some(t)            ⇒ loop(t.left, t.right :: rest, f, m, m(acc, f(t.v)))
       case _ if (rest != Nil) ⇒ loop(rest.head, rest.tail, f, m, acc)
@@ -157,8 +156,7 @@ object BTree extends Foldable0[BTree] {
     }
   }
 
-  @annotation.tailrec
-  private[BTree] def go2[T, U](tree: Option[BTree[T]], rest: List[Option[BTree[T]]], f: T ⇒ U): Unit = {
+  @tailrec def go2[T, U](tree: Option[BTree[T]], rest: List[Option[BTree[T]]], f: T ⇒ U): Unit = {
     tree match {
       case Some(t) ⇒
         f(t.v) //evaluation

@@ -19,20 +19,18 @@ class DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCart
       c ← Gen.alphaUpperChar
     } yield new String(Array(a, b, c))),
     Gen.listOfN(Size, Gen.chooseNum(0, Size - 1))) { (p: Vector[String], cancelled: List[Int]) ⇒
-
-      ShoppingCartLog.info("Wishes: " + p + " cancelled: " + cancelled)
+      ShoppingCartLog.info("Products: " + p + " cancelled: " + cancelled)
 
       val collector = new TrieMap[Int, Set[String]]
       type RType[T] = akka.contrib.datareplication.ORSet[T]
 
-      val RCore = Strategy.Executor(newFixedThreadPool(Runtime.getRuntime.availableProcessors(),
-        new RThreadFactory("r-core")))
+      val RCore = Strategy.Executor(newFixedThreadPool(Runtime.getRuntime.availableProcessors(), new RThreadFactory("shopping-cart-thread")))
 
-      val input = async.boundedQueue[String](Size)(R)
+      val inputBuffer = async.boundedQueue[String](Size)(R)
       val replicas = async.boundedQueue[Int](Size)(R)
 
-      val purchases = p.toSet.&~(cancelled.map(p(_)).toSet).map("product-" + _)
-      ShoppingCartLog.info("purchases: " + purchases)
+      val purchases = (p.toSet &~ cancelled.map(p(_)).toSet).map("product-" + _)
+      ShoppingCartLog.info("Purchases: " + purchases)
 
       val latch = new CountDownLatch(replicasN.size)
       replicasN.foreach { replicas.enqueueOne(_).run }
@@ -41,19 +39,15 @@ class DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCart
       //We need partial order for add/remove events for the same product-uuid
       //because you can't delete a product that hasn't been added
       //So we just add cancellation in the end
-      val ops = P.emitAll(p.map("add-product-" + _) ++ cancelled.map("drop-product-" + p(_)))
-        .toSource
+      val commands = P.emitAll(p.map("add-product-" + _) ++ cancelled.map("drop-product-" + p(_))).toSource
 
-      val Writer = (ops to input.enqueue).drain.onComplete(Process.eval_(input.close))
+      val commandsWriter = (commands to inputBuffer.enqueue).drain.onComplete(Process.eval_(inputBuffer.close))
 
-      val replicator = replicatorChannelFor[RType, String](RCore)
+      val replicator = replicationChannelFor[RType, String](RCore)
 
-      Writer.merge(
-        replicas.dequeue.map {
-          Replica[RType, String](_, input, replicator).run(collector) //run replicas in concurrent manner
-            .runAsync { _ ⇒ latch.countDown() }
-        }
-      )(R).run.run
+      (commandsWriter merge
+        replicas.dequeue.map { Replica[RType, String](_, inputBuffer, replicator).run(collector).runAsync { _ ⇒ latch.countDown() } })(R)
+        .run.run
 
       latch.await()
       replicator.close.run

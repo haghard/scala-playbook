@@ -23,10 +23,10 @@ class EventuateShoppingCartSpec extends Properties("ShoppingCart") {
   property("Eventuate ORSet") = forAll { (products: Vector[String], cancelled: List[Int]) ⇒
     ShoppingCartLog.info("Products: " + products + " cancelled: " + cancelled)
 
-    val collector = new TrieMap[Int, Set[String]]
+    val sink = new TrieMap[Int, Set[String]]
     type RType[T] = com.rbmhtechnology.eventuate.crdt.ORSet[T]
 
-    val input = async.boundedQueue[String](Size)(R)
+    val inputBuffer = async.boundedQueue[String](Size)(R)
     val replicas = async.boundedQueue[Int](Size)(R)
 
     val purchases = products.toSet.&~(cancelled.map(products(_)).toSet).map("product-" + _)
@@ -39,27 +39,24 @@ class EventuateShoppingCartSpec extends Properties("ShoppingCart") {
     //We need partial order for add/remove events for the same product-uuid
     //because you can't delete a product that hasn't been added
     //So we just add cancellation in the end
-    val ops = P.emitAll(products.map("add-product-" + _) ++ cancelled.map("drop-product-" + products(_)))
-      .toSource
+    val commands = P.emitAll(products.map("add-product-" + _) ++ cancelled.map("drop-product-" + products(_))).toSource
 
-    val Writer = (ops to input.enqueue).drain.onComplete(Process.eval_(input.close))
+    val commandsWriter = (commands to inputBuffer.enqueue).drain.onComplete(Process.eval_(inputBuffer.close))
 
-    val RCore = Strategy.Executor(newFixedThreadPool(
-      Runtime.getRuntime.availableProcessors(), new RThreadFactory("shopping-cart-thread")))
-    val replicator = replicatorChannelFor[RType, String](RCore)
+    val RCore = Strategy.Executor(newFixedThreadPool(Runtime.getRuntime.availableProcessors(), new RThreadFactory("shopping-cart-thread")))
+    val replicationChannel = replicationChannelFor[RType, String](RCore)
 
-    Writer.merge(
+    (commandsWriter merge
       replicas.dequeue.map { n ⇒
-        (Replica[RType, String](n, input, replicator) run collector) //run replicas in concurrent manner
-          .runAsync { _ ⇒ latch.countDown() }
+        (Replica[RType, String](n, inputBuffer, replicationChannel) run sink).runAsync { _ ⇒ latch.countDown() }
       }
     )(R).run.run
 
     latch.await()
-    replicator.close.run
+    replicationChannel.close.run
 
     (replicasN.size == replicasN.size) :| "Result size violation" &&
-      (collector(replicasN.head) == purchases) :| "Head violation" &&
-      (collector(replicasN.tail.head) == purchases) :| "Next violation"
+      (sink(replicasN.head) == purchases) :| "Head violation" &&
+      (sink(replicasN.tail.head) == purchases) :| "Next violation"
   }
 }

@@ -81,10 +81,10 @@ object TreeF extends Foldable0[Tree] {
 
   def leaf[T](value: T) = Leaf[T](value)
 
-  override def foldMap[A, B](as: Tree[A])(f: A ⇒ B)(implicit mb: Monoid[B]): B =
+  override def foldMap[A, B](as: Tree[A])(f: A ⇒ B)(implicit M: Monoid[B]): B =
     as match {
       case Leaf(a)      ⇒ f(a)
-      case Branch(l, r) ⇒ mb.append(foldMap(l)(f)(mb), foldMap(r)(f)(mb))
+      case Branch(l, r) ⇒ (M append (foldMap(l)(f)(M), foldMap(r)(f)(M)))
     }
 
   override def foldLeft[A, B](as: Tree[A])(z: B)(f: (B, A) ⇒ B): B = as match {
@@ -97,22 +97,19 @@ object TreeF extends Foldable0[Tree] {
     case Branch(l, r) ⇒ foldRight(l)(foldRight(r)(z)(f))(f)
   }
 
-  override def foldMapPar[A, B](fa: Tree[A])(f: (A) ⇒ B)(implicit M: Monoid[B]): Task[B] = {
-    Task.now(fa).flatMap { tree ⇒
-      foldMap(tree)(element ⇒ Task.delay { f(element) })(monoidPar(M))
-    }
-  }
+  override def foldMapPar[A, B](fa: Tree[A])(f: (A) ⇒ B)(implicit M: Monoid[B]): Task[B] =
+    Task.now(fa).flatMap(foldMap(_)(value ⇒ Task.delay(f(value)))(monoidPar(M)))
 
-  implicit def monoidPar[A](m: Monoid[A]): Monoid[Task[A]] = new Monoid[Task[A]] {
+  implicit def monoidPar[A](M: Monoid[A]): Monoid[Task[A]] = new Monoid[Task[A]] {
     private val ND = Nondeterminism[Task]
 
-    override val zero = Task.delay(m.zero)
+    override val zero = Task.delay(M.zero)
 
     override def append(a: Task[A], b: ⇒ Task[A]): Task[A] =
       for {
         r ← ND.nmap2(Task.fork(a)(S), Task.fork(b)(S)) { (l, r) ⇒
           logger.info(s" op($l,$r)")
-          m.append(l, r)
+          M.append(l, r)
         }
       } yield r
   }
