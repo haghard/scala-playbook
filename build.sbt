@@ -62,7 +62,7 @@ libraryDependencies ++= Seq(
     "org.scodec"          %% "scodec-stream"       % "0.10.0",
     "com.twitter"         %% "util-core"           % "6.23.0",
     "com.google.guava"    %  "guava"               % "18.0",
-    "com.rbmhtechnology"  %% "eventuate"           % "0.3",
+    "com.rbmhtechnology"  %% "eventuate"           % "0.5-SNAPSHOT",
     "com.github.patriknw" %% "akka-data-replication" % "0.11",
     //"com.nrinaudo"        %% "scalaz-stream-csv"   % "0.1.3",
     "com.twitter"         %% "scalding-core"      % "0.15.0",

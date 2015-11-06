@@ -36,7 +36,6 @@ class BTreeStructuralRecursionSpec extends Specification {
     }
   }
 
-  /*
   "Tree" should {
     "has been foldLeft/invert/foldLeft properly" in {
       val tree =
@@ -46,8 +45,8 @@ class BTreeStructuralRecursionSpec extends Specification {
           ),
           node(7,
             node(6), node(9)
+          )
         )
-      )
 
       foldLeft(tree)(0)(_ + _) === 33
       println("Invert")
@@ -144,7 +143,7 @@ class BTreeStructuralRecursionSpec extends Specification {
       m === 15
     }
   }
-  */
+
   sealed trait Tree[+T]
   case object Leaf extends Tree[Nothing]
   case class Node[T](value: T, left: Tree[T], right: Tree[T]) extends Tree[T]

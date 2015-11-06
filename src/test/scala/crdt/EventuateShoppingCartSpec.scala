@@ -12,15 +12,16 @@ import scalaz.stream.{ Process, async }
 import scala.collection.concurrent.TrieMap
 
 /**
- * We emulate concurrently working replicas that receive operations (add/remove)
- * Once replica received operation we update own state and send it in to replication channel
+ * We emulate concurrently working replicas that receive operations [add|remove]
+ * Once replica received operation we update own state and send it in to the replication channel
  * which emulated using [[scalaz.stream.async.mutable.Signal]]
+ * We should end up having equal state on each replica
  */
 class EventuateShoppingCartSpec extends Properties("ShoppingCart") {
   import Replication._
 
-  property("Eventuate ORSet") = forAll { (p: Vector[String], cancelled: List[Int]) ⇒
-    ShoppingCartLog.info("Wishes: " + p + " cancelled: " + cancelled)
+  property("Eventuate ORSet") = forAll { (products: Vector[String], cancelled: List[Int]) ⇒
+    ShoppingCartLog.info("Products: " + products + " cancelled: " + cancelled)
 
     val collector = new TrieMap[Int, Set[String]]
     type RType[T] = com.rbmhtechnology.eventuate.crdt.ORSet[T]
@@ -28,7 +29,7 @@ class EventuateShoppingCartSpec extends Properties("ShoppingCart") {
     val input = async.boundedQueue[String](Size)(R)
     val replicas = async.boundedQueue[Int](Size)(R)
 
-    val purchases = p.toSet.&~(cancelled.map(p(_)).toSet).map("product-" + _)
+    val purchases = products.toSet.&~(cancelled.map(products(_)).toSet).map("product-" + _)
     ShoppingCartLog.info("purchases: " + purchases)
 
     val latch = new CountDownLatch(replicasN.size)
@@ -38,18 +39,18 @@ class EventuateShoppingCartSpec extends Properties("ShoppingCart") {
     //We need partial order for add/remove events for the same product-uuid
     //because you can't delete a product that hasn't been added
     //So we just add cancellation in the end
-    val ops = P.emitAll(p.map("add-product-" + _) ++ cancelled.map("drop-product-" + p(_)))
+    val ops = P.emitAll(products.map("add-product-" + _) ++ cancelled.map("drop-product-" + products(_)))
       .toSource
 
     val Writer = (ops to input.enqueue).drain.onComplete(Process.eval_(input.close))
 
     val RCore = Strategy.Executor(newFixedThreadPool(
-      Runtime.getRuntime.availableProcessors(), new RThreadFactory("r-core")))
+      Runtime.getRuntime.availableProcessors(), new RThreadFactory("shopping-cart-thread")))
     val replicator = replicatorChannelFor[RType, String](RCore)
 
     Writer.merge(
       replicas.dequeue.map { n ⇒
-        Replica[RType, String](n, input, replicator).run(collector) //run replicas in concurrent manner
+        (Replica[RType, String](n, input, replicator) run collector) //run replicas in concurrent manner
           .runAsync { _ ⇒ latch.countDown() }
       }
     )(R).run.run

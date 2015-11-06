@@ -12,7 +12,7 @@ import scalaz.concurrent.Task
 import scalaz._
 import Scalaz._
 
-class TreeSpec extends Specification {
+class BTreeSpec2 extends Specification {
   import TreeF._
 
   implicit val M = scalaz.Monoid[Int]
@@ -53,7 +53,20 @@ class TreeSpec extends Specification {
         Branch(leaf(1), Branch(leaf(2), leaf(3))),
         Branch(leaf(4), Branch(leaf(5), Branch(leaf(6), leaf(7)))))
 
-      foldMapPar(b)(m).run should be equalTo 28
+      /*
+                    |
+             _______|_______
+            |               |
+         +--+--+        +---+-----+
+         |     |        |         |
+         1  +--+--+     4         5
+            |     |               |
+            2     3            +--+--+
+                               |     |
+                               6     7
+    */
+
+      foldMapPar(b)(m).run should be equalTo (1 + 2 + 3 + 4 + 5 + 6 + 7)
     }
   }
 }
@@ -93,7 +106,7 @@ object TreeF extends Foldable0[Tree] {
   implicit def monoidPar[A](m: Monoid[A]): Monoid[Task[A]] = new Monoid[Task[A]] {
     private val ND = Nondeterminism[Task]
 
-    override def zero = Task.delay(m.zero)
+    override val zero = Task.delay(m.zero)
 
     override def append(a: Task[A], b: ⇒ Task[A]): Task[A] =
       for {

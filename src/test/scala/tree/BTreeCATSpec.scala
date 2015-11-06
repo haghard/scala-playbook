@@ -16,9 +16,9 @@ class BTreeCATSpec extends Specification {
     def print[T](t: BTree[T]): Unit = {
       def printLoop(pad: String, t: BTree[T]): Unit = {
         t match {
-          case Leaf(elem) ⇒ System.out.println(s"$pad$elem")
+          case Leaf(elem) ⇒ println(s"$pad$elem")
           case Node(l, r) ⇒
-            System.out.println(s"$pad+-\\")
+            println(s"$pad+-\\")
             printLoop(pad + "| ", l)
             printLoop(pad + "  ", r)
         }

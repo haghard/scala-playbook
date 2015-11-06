@@ -14,7 +14,7 @@ object Replicas {
 
     override def converge(cmd: String, s: com.rbmhtechnology.eventuate.crdt.ORSet[String]): com.rbmhtechnology.eventuate.crdt.ORSet[String] = cmd match {
       case ADD(v) ⇒
-        localTime = s.versionedEntries./:(localTime)(_ merge _.updateTimestamp).increment(v) //increase(v)
+        localTime = s.versionedEntries./:(localTime)(_ merge _.updateTimestamp).increment(v)
         val r = s.add(v, localTime)
         LoggerE.info(s"Add $v\n ON $num\n $localTime\n")
         r

@@ -413,7 +413,7 @@ package object streamRepertoires {
   //Detached flows with expand + conflate
   def scenario12: RunnableGraph[Unit] = {
     val srcSlow = throttledSource(statsD, 1 second, 1000 milliseconds, Int.MaxValue, "slowProducer12")
-      .expand(identity)(r => (r + r, r))
+      .expand(identity)(r ⇒ (r + r, r))
 
     val srcFast = throttledSource(statsD, 1 second, 200 milliseconds, Int.MaxValue, "fastProducer12")
       .conflate(identity)(_ + _)
@@ -573,7 +573,7 @@ class DegradingActor(val name: String, val statsD: InetSocketAddress, delayPerMs
 class BatchActor(name: String, val statsD: InetSocketAddress, delay: Long, bufferSize: Int) extends ActorSubscriber with StatsD {
   private val queue = new mutable.Queue[Int]
 
-  override protected val requestStrategy  = new MaxInFlightRequestStrategy(bufferSize) {
+  override protected val requestStrategy = new MaxInFlightRequestStrategy(bufferSize) {
     override def inFlightInternally = queue.size
   }
 

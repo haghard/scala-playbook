@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
+import scala.annotation.tailrec
 import scala.concurrent.forkjoin.ThreadLocalRandom
 import scala.concurrent.{ Await, Promise, ExecutionContext, Future }
 import scalaz._
@@ -109,12 +110,12 @@ class BTreeSpec extends Specification {
             5
       */
 
-      val t = /\(1,
-        Some(/\(2,
-          Some(/\(4,
-            r = Some(/\(5)))))),
-        Some(/\(3,
-          r = Some(/\(20)))))
+      val t = ~<(1,
+        Option(~<(2,
+          Option(~<(4,
+            r = Option(~<(5)))))),
+        Option(~<(3,
+          r = Option(~<(20)))))
 
       BTree.foldMap2(Option(t))(identity) should be equalTo 35
     }
@@ -123,7 +124,7 @@ class BTreeSpec extends Specification {
 
 object BTree extends Foldable0[BTree] {
 
-  def /\[T](v: T, l: Option[BTree[T]] = None, r: Option[BTree[T]] = None) = new BTree(v, l, r)
+  def ~<[T](v: T, l: Option[BTree[T]] = None, r: Option[BTree[T]] = None) = new BTree(v, l, r)
 
   def apply[T](levelNumber: Int)(block: ⇒ T): BTree[T] =
     levelNumber match {
@@ -167,8 +168,7 @@ object BTree extends Foldable0[BTree] {
     }
   }
 
-  @annotation.tailrec
-  private[BTree] def go[T, U](tree: Option[BTree[T]], rest: List[Option[BTree[T]]], f: T ⇒ U): Unit = {
+  @tailrec def go[T, U](tree: Option[BTree[T]], rest: List[Option[BTree[T]]], f: T ⇒ U): Unit = {
     tree match {
       case Some(t) ⇒
         f(t.v) //evaluation
@@ -198,17 +198,14 @@ object BTree extends Foldable0[BTree] {
   private[BTree] val executor = newFixedThreadPool(Runtime.getRuntime.availableProcessors(),
     new NamedThreadFactory("btree-folder"))
 
-  private[BTree] implicit def monoidT[A](m: Monoid[A]): Monoid[Task[A]] = new Monoid[Task[A]] {
+  private[BTree] implicit def monoidPar[A](m: Monoid[A]): Monoid[Task[A]] = new Monoid[Task[A]] {
     private val ND = Nondeterminism[Task]
 
-    override def zero = Task.delay(m.zero)
+    override val zero = Task.delay(m.zero)
 
     override def append(a: Task[A], b: ⇒ Task[A]): Task[A] =
       for {
-        r ← ND.nmap2(Task.fork(a)(executor), Task.fork(b)(executor)) { (l, r) ⇒
-          //logger.info(s" op($l,$r)")
-          m.append(l, r)
-        }
+        r ← ND.nmap2(Task.fork(a)(executor), Task.fork(b)(executor))(m.append(_, _))
       } yield r
   }
 
@@ -218,7 +215,7 @@ object BTree extends Foldable0[BTree] {
         //Thread.sleep(ThreadLocalRandom.current().nextInt(50, 100));
         //logger.info(s"read $element")
         f(element)
-      })(monoidT(m))
+      })(monoidPar(m))
     }
 }
 
@@ -233,8 +230,7 @@ class BTree[T] private[BTree] (val v: T, val left: Option[BTree[T]], val right: 
   }
 
   override def size(): Int = {
-    @annotation.tailrec
-    def go(acc: Int, tree: Option[BTree[T]], rest: List[Option[BTree[T]]]): Int = {
+    @tailrec def go(acc: Int, tree: Option[BTree[T]], rest: List[Option[BTree[T]]]): Int = {
       tree match {
         case Some(tr) ⇒ go(1 + acc, tr.left, tr.right :: rest)
         case _        ⇒ if (rest == Nil) acc else go(acc, rest.head, rest.tail)
