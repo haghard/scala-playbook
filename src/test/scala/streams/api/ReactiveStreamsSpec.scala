@@ -15,18 +15,18 @@ class ReactiveStreamsSpec extends WordSpecLike with MustMatchers {
   implicit val E: ExecutorService =
     new ForkJoinPool(Runtime.getRuntime.availableProcessors() * 2)
 
-  trait RandomRequestSubscriber[T] extends SyncProcessSubscriber[T] {
-    override def updateBufferSize() = ThreadLocalRandom.current().nextInt(1, 12)
+  trait RandomRequestSubscriber[T] extends ScalazSubscriber[T] {
+    override def resume() = ThreadLocalRandom.current().nextInt(1, 12)
   }
 
-  trait OnNextBlowupSubscriber[T] extends SyncProcessSubscriber[T] {
+  trait OnNextBlowupSubscriber[T] extends ScalazSubscriber[T] {
     abstract override def onNext(t: T): Unit = {
       super.onNext(t)
       throw new Exception("onNext")
     }
   }
 
-  trait OneElementSubscriber[T] extends SyncProcessSubscriber[T] {
+  trait OneElementSubscriber[T] extends ScalazSubscriber[T] {
     abstract override def onNext(t: T): Unit = {
       super.onNext(t)
       subscription.fold(())(_.cancel())
@@ -38,8 +38,8 @@ class ReactiveStreamsSpec extends WordSpecLike with MustMatchers {
       val source: Process[Task, Int] = naturals
       val latch = new CountDownLatch(1)
 
-      ScalazProcessPublisher[Int](source.take(189))
-        .subscribe(new SyncProcessSubscriber1[Int](latch, 10))
+      ScalazPublisher.bounded[Int](source, 189)
+        .subscribe(new ScalazSubscriber1[Int](latch, 10))
 
       assert(latch.await(3, TimeUnit.SECONDS))
     }
@@ -51,8 +51,8 @@ class ReactiveStreamsSpec extends WordSpecLike with MustMatchers {
       val source: Process[Task, Int] = naturals
       val errors = new AtomicReference[Throwable]
 
-      ScalazProcessPublisher[Int](source.take(25))
-        .subscribe(new SyncProcessSubscriber[Int](11, sync, errors) with OnNextBlowupSubscriber[Int])
+      ScalazPublisher.bounded[Int](source, 25)
+        .subscribe(new ScalazSubscriber[Int](11, sync, errors) with OnNextBlowupSubscriber[Int])
 
       sync.get
       errors.get().getMessage must be === "onNext"
@@ -64,26 +64,27 @@ class ReactiveStreamsSpec extends WordSpecLike with MustMatchers {
       val Size = 100
       val sync = new SyncVar[Long]()
       val errors = new AtomicReference[Throwable]
-      val source: Process[Task, Int] = naturals.map { r ⇒
-        Thread.sleep(ThreadLocalRandom.current().nextInt(100, 150))
-        r
-      }
+      val source: Process[Task, Int] =
+        (naturals zip Process.repeatEval(Task.delay(Thread.sleep(ThreadLocalRandom.current().nextInt(100, 150))))).map(_._1)
 
-      val P = ScalazProcessPublisher[Int](source.take(Size))
+      val ScalazSource = ScalazPublisher.bounded[Int](source, Size)
 
-      P.subscribe(new SyncProcessSubscriber[Int](26, sync, errors) with RandomRequestSubscriber[Int])
-      Thread.sleep(1500)
+      ScalazSource.subscribe(new ScalazSubscriber[Int](10, sync, errors) with RandomRequestSubscriber[Int])
+      Thread.sleep(200)
 
       val sync1 = new SyncVar[Long]()
-      P.subscribe(new SyncProcessSubscriber[Int](2, sync1, errors) with RandomRequestSubscriber[Int])
-
-      Thread.sleep(1500)
+      ScalazSource.subscribe(new ScalazSubscriber[Int](2, sync1, errors) with RandomRequestSubscriber[Int])
+      Thread.sleep(200)
 
       val sync2 = new SyncVar[Long]()
-      P.subscribe(new SyncProcessSubscriber[Int](3, sync2, errors) with RandomRequestSubscriber[Int])
+      ScalazSource.subscribe(new ScalazSubscriber[Int](5, sync2, errors) with RandomRequestSubscriber[Int])
+
+      val sync3 = new SyncVar[Long]()
+      ScalazSource.subscribe(new ScalazSubscriber[Int](10, sync3, errors) with RandomRequestSubscriber[Int])
 
       sync1.get must be <= Size.toLong
       sync2.get must be <= Size.toLong
+      sync3.get must be <= Size.toLong
       sync.get must be === Size.toLong
     }
   }

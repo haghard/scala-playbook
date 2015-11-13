@@ -135,7 +135,7 @@ class ScalazProcessRepertoires extends Specification {
    */
   def broadcastN[T](n: Int = 2, source: Process[Task, T], limit: Int = 10)(implicit S: scalaz.concurrent.Strategy): Process[Task, Seq[Process[Task, T]]] = {
     val queues = (0 until n) map (_ ⇒ async.boundedQueue[T](limit)(S))
-    val broadcast = queues./:(source)((src, q) ⇒ src.observe(q.enqueue))
+    val broadcast = queues./:(source)((src, q) ⇒ (src observe q.enqueue))
       .onComplete {
         Process.eval {
           logger.info("All input was scheduled")
@@ -145,8 +145,8 @@ class ScalazProcessRepertoires extends Specification {
     (broadcast.drain merge P.emit(queues.map(_.dequeue)))(S)
   }
 
-  "Broadcast single process for N output processes with degradation" should {
-    "have gapped at most of queue size and slow down the whole pipeline" in {
+  "Broadcast single process for N output processes wich gets slower with time" should {
+    "left behind maximum on queue size and slow down publisher" in {
       implicit val E = newFixedThreadPool(4, new NamedThreadFactory("broadcast"))
       implicit val S = Strategy.Executor(E)
 

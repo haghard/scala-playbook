@@ -26,27 +26,29 @@ class DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCart
 
       val RCore = Strategy.Executor(newFixedThreadPool(Runtime.getRuntime.availableProcessors(), new RThreadFactory("shopping-cart-thread")))
 
-      val inputBuffer = async.boundedQueue[String](Size)(R)
+      val commands = async.boundedQueue[String](Size)(R)
       val replicas = async.boundedQueue[Int](Size)(R)
 
       val purchases = (p.toSet &~ cancelled.map(p(_)).toSet).map("product-" + _)
-      ShoppingCartLog.info("Purchases: " + purchases)
+      ShoppingCartLog.info("Accepted purchases: " + purchases)
 
       val latch = new CountDownLatch(replicasN.size)
       replicasN.foreach { replicas.enqueueOne(_).run }
       replicas.close.run
 
-      //We need partial order for add/remove events for the same product-uuid
+      //We need happens-before order for [add|remove] events with the same product-uuid
       //because you can't delete a product that hasn't been added
       //So we just add cancellation in the end
-      val commands = P.emitAll(p.map("add-product-" + _) ++ cancelled.map("drop-product-" + p(_))).toSource
 
-      val commandsWriter = (commands to inputBuffer.enqueue).drain.onComplete(Process.eval_(inputBuffer.close))
+      //What would happpen if  add|remove with same product-uuid was concurrent ????????????. Why is the winner ?
+      val commandsP = P.emitAll(p.map("add-product-" + _) ++ cancelled.map("drop-product-" + p(_))).toSource
+
+      val commandsWriter = (commandsP to commands.enqueue).drain.onComplete(Process.eval_(commands.close))
 
       val replicator = replicationChannelFor[RType, String](RCore)
 
       (commandsWriter merge
-        replicas.dequeue.map { Replica[RType, String](_, inputBuffer, replicator).run(collector).runAsync { _ ⇒ latch.countDown() } })(R)
+        replicas.dequeue.map { Replica[RType, String](_, commands, replicator).run(collector).runAsync { _ ⇒ latch.countDown() } })(R)
         .run.run
 
       latch.await()

@@ -7,7 +7,7 @@ import akka.stream.actor.{ ActorSubscriber, ActorPublisher }
 import akka.stream.scaladsl.{ FlowGraph, Flow }
 import mongo.MongoProgram.NamedThreadFactory
 import streams.BatchWriter.WriterDone
-import streams.api.ScalazProcessPublisher
+import streams.api.ScalazPublisher
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.{ Failure, Success }
@@ -60,7 +60,7 @@ package object streams { outer ⇒
      * @return
      */
     def toAkkaSource(implicit ex: ExecutorService): akka.stream.scaladsl.Source[I, Unit] =
-      akka.stream.scaladsl.Source(ScalazProcessPublisher(self))
+      akka.stream.scaladsl.Source(ScalazPublisher(self))
   }
 
   private def throughFlow[I](process: Process[Task, I], batchSize: Int, flow: Flow[I, I, Unit])(implicit arf: ActorRefFactory, m: ActorMaterializer): Process[Task, Vector[I]] = {

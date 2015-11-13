@@ -23,7 +23,7 @@ class EventuateConcurrentVersionsSpec extends Specification {
 
   "ConcurrentVersionsTree conflict" should {
     "be resolved" in {
-      val cvt: ConcurrentVersions[String, String] = ConcurrentVersionsTree(state)
+      val cvt: ConcurrentVersions[String, String] = ConcurrentVersionsTree(state).withOwner("replica1")
 
       cvt.update("A", vectorTime1(1))
         .update("B", vectorTime2(1, 1))

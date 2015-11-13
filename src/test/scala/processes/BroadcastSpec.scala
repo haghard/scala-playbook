@@ -17,14 +17,15 @@ class BroadcastSpec extends Specification {
   val logger = Logger.getLogger("broadcast")
 
   /**
-   *
+   * Dynamic broadcast
    *
    */
-  def broadcast[A](p: Process[Task, A], subs: Process[Task, String], bound: Int = 10): Process[Task, Unit] = Process.suspend {
+  def broadcast[A](sourceP: Process[Task, A], subs: Process[Task, String],
+                   actions: Map[String, (A, String) ⇒ String],
+                   bound: Int = 10): Process[Task, Unit] = Process.suspend {
     import scalaz.stream.io
-
-    val PUB = newFixedThreadPool(2, new NamedThreadFactory("broadcast-pub")) // publish, and fork new consumers
-    val I = Strategy.Executor(PUB)
+    val Pub = newFixedThreadPool(2, new NamedThreadFactory("publisher")) // publish and fork new consumers
+    val I = Strategy.Executor(Pub)
     val S = newFixedThreadPool(1, new NamedThreadFactory("signal"))
     val SIG = Strategy.Executor(S)
 
@@ -69,29 +70,29 @@ class BroadcastSpec extends Specification {
 
       p = q.dequeue.onComplete(P eval_ unsubscribe(q))
 
-      back ← if (result.contains(updatedQs)) Task.delay { logger.info(s"New subscription from $name"); p }
+      back ← if (result contains updatedQs) Task.delay { logger.info(s"New subscription from $name"); p }
       else subscribe(name)
     } yield back
 
-    val publisher = (p to sink.lift(publish)).drain
+    def publisher = (sourceP to sink.lift(publish)).drain
 
-    val source = subs.map { n ⇒
+    def subscriber = subs.map { n ⇒
       Task.fork {
         for {
-          t ← subscribe(n)
-          r ← (t.map(s"[${Thread.currentThread().getName}]: $n got " + _) to io.stdOutLines).run
-        } yield r
-      }(PUB).runAsync(_ ⇒ ())
+          s ← subscribe(n)
+          _ ← (s.map(elem ⇒ actions(n)(elem, n)) to io.stdOutLines).run[Task]
+        } yield ()
+      }(Pub).runAsync(_ ⇒ ())
     }
 
-    (publisher merge source)(I)
-      .onComplete(P.eval_(signal.set(Set()).map(_ ⇒ logger.info("Done"))))
+    (publisher merge subscriber)(I)
+      .onComplete(P.eval_(signal.set(Set()).map(_ ⇒ logger.info("Broadcast flow has been completed"))))
   }
 
-  "broadcast" should {
-    "run for n" in {
-      val names: Process[Task, String] = P.emitAll(Seq("Doctor Who", "Sherlock", "Ironman", "Superman"))
-      val subs = (names zip P.repeatEval(Task.delay(Thread.sleep(4000)))).map(_._1)
+  "Dynamic broadcast" should {
+    "run with multiple subscribers" in {
+      val subscriberNames: Process[Task, String] = P.emitAll(Seq("Doctor Who", "Sherlock", "Ironman", "Superman"))
+      val subs = (subscriberNames zip P.repeatEval(Task.delay(Thread.sleep(4000)))).map(_._1)
 
       def naturals: Process[Task, Long] = {
         def go(i: Long): Process[Task, Long] =
@@ -99,7 +100,10 @@ class BroadcastSpec extends Specification {
         go(1l)
       }
 
-      broadcast(naturals.take(30), subs).runLog.run
+      def print = { (elem: Long, name: String) ⇒ s"$name in [${Thread.currentThread.getName}] has got $elem" }
+      val actions = Map("Doctor Who" -> print, "Sherlock" -> print, "Ironman" -> print, "Superman" -> print)
+
+      broadcast((naturals take 30), subs, actions).runLog.run
       1 === 1
     }
   }

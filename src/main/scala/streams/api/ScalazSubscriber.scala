@@ -1,40 +1,40 @@
 package streams.api
 
 import org.apache.log4j.Logger
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.atomic.AtomicInteger
+import scala.concurrent.SyncVar
 import org.reactivestreams.{ Subscription, Subscriber }
+import java.util.concurrent.atomic.{ AtomicInteger, AtomicReference }
 
 /**
- * SyncProcessSubscriber1 is an implementation of Reactive Streams `Subscriber`,
+ * SyncProcessSubscriber is an implementation of Reactive Streams `Subscriber`,
  * it runs synchronously (on the Publisher's thread) and invokes a user-defined method to process each element.
  */
-class SyncProcessSubscriber1[T](val latch: CountDownLatch, batchSize: Int) extends Subscriber[T] {
+class ScalazSubscriber[T](requestN: Int, val sync: SyncVar[Long], error: AtomicReference[Throwable]) extends Subscriber[T] {
   private val logger = Logger.getLogger("subscriber")
-
-  private val i = new AtomicInteger(0)
-  protected val bs = new AtomicInteger(batchSize)
+  protected val bs = new AtomicInteger(requestN)
   protected var subscription: Option[Subscription] = None
 
-  override def onNext(t: T): Unit = {
-    logger.info(s"onNext: $t")
-    if (i.getAndIncrement() == 100) {
-      subscription.fold(())(_.cancel())
-      latch.countDown()
-    }
+  //for testing only
+  protected val acc = new AtomicInteger(0)
 
-    bs.decrementAndGet()
-    if (bs.get() == 0) {
-      bs.set(updateBufferSize())
+  override def onNext(element: T): Unit = {
+    logger.info(s"onNext $element")
+    acc.incrementAndGet()
+    if (bs.decrementAndGet() == 0) {
+      bs.set(requestN)
       subscription.fold(())(_.request(bs.get()))
     }
   }
 
-  protected def updateBufferSize() = batchSize
+  protected def resume() = requestN
 
   override def onError(throwable: Throwable): Unit = {
+    if (throwable == null) throw null
+
     logger.info(s"Error ${throwable.getMessage}")
     subscription = None
+    error.set(throwable)
+    sync.put(bs.get())
   }
 
   override def onSubscribe(sub: Subscription): Unit = {
@@ -51,5 +51,6 @@ class SyncProcessSubscriber1[T](val latch: CountDownLatch, batchSize: Int) exten
   override def onComplete(): Unit = {
     logger.info("onComplete")
     subscription = None
+    sync.put(acc.get())
   }
 }
