@@ -66,7 +66,7 @@ class ScalazPublisher[T] private (source: Process[Task, T])(implicit ex: Executo
       case opt        ⇒ opt
     }
 
-    _ ← if (result.contains(updatedQs))
+    _ ← if (result contains updatedQs)
       q.close.map(_ ⇒ logger.info(s"unsubscribe"))
     else
       unsubscribe(q)

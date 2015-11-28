@@ -132,7 +132,6 @@ class ScalazSpec extends Specification {
   }
 
   "Monad" should {
-
     "bind" in {
       val M = Monad[Option]
       def func(m: Int): Option[Int] = Some(m * 5)
@@ -273,6 +272,7 @@ class ScalazSpec extends Specification {
       ans._2 === List(1, 2)
     }
   }
+
 
   "Free monad with Evaluator" should {
 

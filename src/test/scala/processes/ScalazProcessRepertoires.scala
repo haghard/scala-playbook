@@ -2,6 +2,8 @@ package processes
 
 import org.scalacheck.Gen
 import org.apache.log4j.Logger
+import scalaz.stream.Cause.End
+import scalaz.stream.ReceiveY._
 import scalaz.{ \/-, -\/, \/ }
 import scalaz.stream.Process._
 import scala.concurrent.SyncVar
@@ -145,7 +147,7 @@ class ScalazProcessRepertoires extends Specification {
     (broadcast.drain merge P.emit(queues.map(_.dequeue)))(S)
   }
 
-  "Broadcast single process for N output processes wich gets slower with time" should {
+  "Broadcast single process for N output processes which gets slower with time" should {
     "left behind maximum on queue size and slow down publisher" in {
       implicit val E = newFixedThreadPool(4, new NamedThreadFactory("broadcast"))
       implicit val S = Strategy.Executor(E)
@@ -304,7 +306,7 @@ class ScalazProcessRepertoires extends Specification {
       val sinkP = process1.lift[Int, Int] { x ⇒ logger.debug(s"<~ Consumed: $x"); x }
       val dropLast = process1.lift[Int, Int] { x ⇒ logger.debug(s"~> Dropped: $x"); x }
       val dropBuffer = process1.lift[Seq[Int], Int] { seq ⇒ logger.debug(s"~> Dropped buffer: $seq"); 0 }
-      val enqueueP = process1.lift[(Int, Unit), Unit] { x ⇒ (buffer enqueueOne (x._1) run) }
+      val enqueueP = process1.lift[(Int, Unit), Unit] { x ⇒ buffer enqueueOne (x._1) run }
 
       val sink = (buffer.dequeue zip sleep(300)).map(_._1) pipe sinkP
 
@@ -344,7 +346,53 @@ class ScalazProcessRepertoires extends Specification {
     }
   }
 
-  "Exchange" should {
+
+  //this terminates after any side terminate
+  def eitherHaltBoth[I, I2]: Wye[I, I2, I \/ I2] =
+    wye.receiveBoth {
+      case ReceiveL(i)      ⇒ Process.emit(-\/(i)) ++ eitherHaltBoth
+      case ReceiveR(i)      ⇒ Process.emit(\/-(i)) ++ eitherHaltBoth
+      case HaltL(End)       ⇒ Halt(End)
+      case HaltR(End)       ⇒ Halt(End)
+      case h @ HaltOne(rsn) ⇒ Halt(rsn)
+    }
+
+  val Scheduler = newScheduledThreadPool(1, new NamedThreadFactory("Scheduler"))
+  val I = Strategy.Executor(newScheduledThreadPool(2, new NamedThreadFactory("infrastructure")))
+
+  def buildProgress(i: Int) = List.fill(i + 1)(" ★ ").mkString
+
+  def progress(src: Process[Task, String], n: Int)(implicit d: FiniteDuration, S: Strategy): Process[Task, String] = {
+    ((src wye time.awakeEvery(d)(I, Scheduler).zipWithIndex.map(_._2 % n))(eitherHaltBoth)(S) |> process1.sliding(2)).flatMap { batch ⇒
+      val elements =
+        if (batch.size == 1) Seq(batch(0).fold(r ⇒ r, buildProgress(_)))
+        else if (batch.forall(_.isRight)) batch.headOption.map(_.fold(r ⇒ r, buildProgress(_))).toSeq
+        else batch.filter(_.isLeft).map(_.fold(l ⇒ l, buildProgress(_)))
+      Process.emitAll(elements)
+    } |> process1.distinctConsecutive[String]
+  }
+
+  def naturals(size: Int, stepMs: Long = 3000l): Process[Task, String] = {
+    def go(i: Int, sleep: Long, iterN: Int): Process[Task, String] =
+      P.await(Task.delay(i)) { i ⇒
+        Thread.sleep(stepMs)
+        if (iterN > 0) P.emit(i.toString) ++ go(i + 1, ThreadLocalRandom.current().nextLong(1l, stepMs), iterN - 1)
+        else Process.halt
+      }
+    go(1, ThreadLocalRandom.current().nextLong(1l, stepMs), size)
+  }
+
+  "track progress" should {
+    val S = Strategy.Executor(newFixedThreadPool(2, new NamedThreadFactory("progress")))
+    progress(naturals(50), 10)(new FiniteDuration(300, TimeUnit.MILLISECONDS), S)
+      .to(sink.lift[Task, String](l ⇒ Task.delay(logger.debug(l))))
+      .runLog
+      .run
+
+    1 === 1
+  }
+
+  "exchange" should {
     "have transferred from InSystem to OutSystem" in {
       val Size = 60
       val I = Strategy.Executor(newFixedThreadPool(4, new NamedThreadFactory("exchange-worker")))
@@ -354,7 +402,8 @@ class ScalazProcessRepertoires extends Specification {
 
       (P.emitAll(1 to Size) to InSystem.enqueue)
         .onComplete(P.eval_(InSystem.close))
-        .run.runAsync { _ ⇒ logger.info("All input data was written") }
+        .run
+        .runAsync { _ ⇒ logger.info("All input data was written") }
 
       val Ex = Exchange(InSystem.dequeue, OutSystem.enqueue)
 

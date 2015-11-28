@@ -7,7 +7,8 @@ import mongo.MongoProgram.NamedThreadFactory
 
 import scala.concurrent.duration.Duration
 import scalaz.concurrent.{ Strategy, Task }
-import scalaz.stream.{ Process, process1, time }
+import scalaz.stream.Process._
+import scalaz.stream._
 import scala.concurrent.forkjoin.{ ForkJoinPool, ThreadLocalRandom }
 import scala.concurrent.duration._
 
@@ -48,7 +49,9 @@ class AtLeastEverySpec extends Specification {
       p.take(n)
         .map { r ⇒ logger.info(s"result - $r"); r }
         .onFailure { th ⇒ logger.debug(s"Failure: ${th.getMessage}"); P.halt }
-        .onComplete { P.eval(Task.delay(logger.debug(s"Process has been completed"))) }
+        .onComplete {
+          P.eval(Task.delay(logger.debug(s"Process has been completed")))
+        }
         .run.run
 
       1 === 1
