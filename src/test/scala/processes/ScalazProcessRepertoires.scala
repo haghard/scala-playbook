@@ -357,11 +357,12 @@ class ScalazProcessRepertoires extends Specification {
       case h @ HaltOne(rsn) ⇒ Halt(rsn)
     }
 
-  val Scheduler = newScheduledThreadPool(1, new NamedThreadFactory("Scheduler"))
+  val Scheduler = newScheduledThreadPool(1, new NamedThreadFactory("scheduler"))
   val I = Strategy.Executor(newScheduledThreadPool(2, new NamedThreadFactory("infrastructure")))
 
   def buildProgress(i: Int) = List.fill(i + 1)(" ★ ").mkString
 
+  import scalaz._, Scalaz._
   def progress(src: Process[Task, String], n: Int)(implicit d: FiniteDuration, S: Strategy): Process[Task, String] = {
     ((src wye time.awakeEvery(d)(I, Scheduler).zipWithIndex.map(_._2 % n))(eitherHaltBoth)(S) |> process1.sliding(2)).flatMap { batch ⇒
       val elements =
@@ -372,7 +373,7 @@ class ScalazProcessRepertoires extends Specification {
     } |> process1.distinctConsecutive[String]
   }
 
-  def naturals(size: Int, stepMs: Long = 3000l): Process[Task, String] = {
+  def naturals(size: Int, stepMs: Long = 2000l): Process[Task, String] = {
     def go(i: Int, sleep: Long, iterN: Int): Process[Task, String] =
       P.await(Task.delay(i)) { i ⇒
         Thread.sleep(stepMs)
@@ -383,13 +384,15 @@ class ScalazProcessRepertoires extends Specification {
   }
 
   "track progress" should {
-    val S = Strategy.Executor(newFixedThreadPool(2, new NamedThreadFactory("progress")))
-    progress(naturals(50), 10)(new FiniteDuration(300, TimeUnit.MILLISECONDS), S)
-      .to(sink.lift[Task, String](l ⇒ Task.delay(logger.debug(l))))
-      .runLog
-      .run
+    "run" in {
+      val S = Strategy.Executor(newFixedThreadPool(2, new NamedThreadFactory("progress")))
+      progress(naturals(50), 10)(new FiniteDuration(300, TimeUnit.MILLISECONDS), S)
+        .to(sink.lift[Task, String](l ⇒ Task.delay(logger.debug(l))))
+        .runLog
+        .run
 
-    1 === 1
+      1 === 1
+    }
   }
 
   "exchange" should {
