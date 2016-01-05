@@ -72,8 +72,11 @@ object MongoProgram {
     private val threadNumber = new AtomicInteger(1)
     private val group: ThreadGroup = Thread.currentThread().getThreadGroup
 
-    override def newThread(r: Runnable) = new Thread(this.group, r,
-      s"$namePrefix-${threadNumber.getAndIncrement()}", 0L)
+    override def newThread(r: Runnable) = {
+      val t = new Thread(this.group, r, s"$namePrefix-${threadNumber.getAndIncrement()}", 0L)
+      t.setDaemon(true)
+      t
+    }
   }
 }
 

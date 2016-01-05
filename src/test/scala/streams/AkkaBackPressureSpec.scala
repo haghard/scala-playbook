@@ -24,14 +24,14 @@ class AkkaBackPressureSpec extends TestKit(ActorSystem("streams")) with WordSpec
 
   def shift(offset: Int) = Flow() { implicit b ⇒
     import FlowGraph.Implicits._
-    val bcast = b.add(Broadcast[Int](2))
+    val broadcast = b.add(Broadcast[Int](2))
     val zip = b.add(Zip[Int, Int])
     val processing = b.add(Flow[(Int, Int)] map { nums ⇒ logger.debug(s"handle: $nums"); (nums._1, nums._2) })
-    bcast ~> Flow[Int].buffer(offset, akka.stream.OverflowStrategy.backpressure) ~> zip.in0
-    bcast ~> Flow[Int].drop(offset) ~> zip.in1
+    broadcast ~> Flow[Int].buffer(offset, akka.stream.OverflowStrategy.backpressure) ~> zip.in0
+    broadcast ~> Flow[Int].drop(offset) ~> zip.in1
     zip.out ~> processing
 
-    (bcast.in, processing.outlet)
+    (broadcast.in, processing.outlet)
   }
 
   /**

@@ -259,7 +259,6 @@ class BTreeStructuralRecursionSpec extends Specification {
           case Leaf ⇒
             System.out.println(s"$pad$e")
           case Node(v, Leaf, Leaf) ⇒
-            //System.out.println(s"$pad+-\\")
             printHelper(pad + "| ", v, Leaf)
             printHelper(pad + "  ", v, Leaf)
           case Node(v, l, r) ⇒
