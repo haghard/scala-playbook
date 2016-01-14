@@ -311,6 +311,6 @@ class TaskSpec extends FlatSpec with org.scalatest.Matchers {
 
       go(m, n, 0)
     }
-    1 === 1
+    1 should ===(1)
   }
 }

@@ -18,17 +18,17 @@ import scala.language.higherKinds
 package object mongo3 {
   import scalaz.stream._
 
-  type FreeMongoIO[A] = Free.FreeC[MongoIO, A]
+  type Dsl[A] = Free.FreeC[MongoIO, A]
 
   sealed trait MongoIO[+A]
   case class Find[A](dbName: String, collection: String, query: DBObject) extends MongoIO[A]
   case class FindOne[A](dbName: String, collection: String, query: DBObject) extends MongoIO[A]
   case class Insert[A](dbName: String, collection: String, insertObj: DBObject) extends MongoIO[A]
 
-  trait MInstruction[M[_]] {
+  trait Effect[M[_]] {
     protected implicit var exec: ExecutorService = null
     def logger(): Logger
-    def withExecutor(ex: ExecutorService): MInstruction[M] = {
+    def withExecutor(ex: ExecutorService): Effect[M] = {
       exec = ex
       this
     }
@@ -36,8 +36,8 @@ package object mongo3 {
     def effect[A](client: MongoClient, db: String, c: String, q: DBObject): M[A]
   }
 
-  object MInstruction {
-    def apply[M[_]](implicit sf: MInstruction[M]): MInstruction[M] = sf
+  object Effect {
+    def apply[M[_]](implicit sf: Effect[M]): Effect[M] = sf
 
     @tailrec
     private def loop[A](cursor: DBCursor, logger: Logger, result: Vector[A] = Vector.empty[A]): Vector[A] =
@@ -47,8 +47,8 @@ package object mongo3 {
         loop(cursor, logger, result :+ r)
       } else result
 
-    implicit def ObservableAction: MInstruction[Observable] =
-      new MInstruction[Observable] {
+    implicit def ObservableAction: Effect[Observable] =
+      new Effect[Observable] {
         override val logger = Logger.getLogger("Observable-Producer")
         override def apply[A](a: ⇒ A) = Observable.just(a)
         override def effect[A](client: MongoClient, db: String, c: String, q: DBObject) =
@@ -77,8 +77,8 @@ package object mongo3 {
           }.subscribeOn(ExecutionContextScheduler(ExecutionContext.fromExecutor(exec)))
       }
 
-    implicit def FutureAction: MInstruction[Future] =
-      new MInstruction[Future] {
+    implicit def FutureAction: Effect[Future] =
+      new Effect[Future] {
         override val logger = Logger.getLogger("future")
         implicit val EC = scala.concurrent.ExecutionContext.fromExecutor(exec)
 
@@ -88,11 +88,11 @@ package object mongo3 {
           Future {
             val cursor = client.getDB(db).getCollection(c).find(q)
             new BasicDBObject("rs", seqAsJavaList(loop(cursor, logger))).asInstanceOf[A]
-          }
+          }(EC)
       }
 
-    implicit def TaskAction: MInstruction[Task] =
-      new MInstruction[Task] {
+    implicit def TaskAction: Effect[Task] =
+      new Effect[Task] {
         override val logger = Logger.getLogger("task")
 
         override def apply[A](a: ⇒ A): Task[A] = Task(a)
@@ -101,14 +101,14 @@ package object mongo3 {
           Task {
             val cursor = client.getDB(db).getCollection(c).find(q)
             new BasicDBObject("rs", seqAsJavaList(loop(cursor, logger))).asInstanceOf[A]
-          }
+          }(exec)
         }
       }
 
     type TaskP[x] = Process[Task, x]
     //({ type λ[x] = Process[Task, x] })#λ
-    implicit def ProcessAction: MInstruction[TaskP] =
-      new MInstruction[TaskP] {
+    implicit def ProcessAction: Effect[TaskP] =
+      new Effect[TaskP] {
         override val logger = Logger.getLogger("Process-Producer")
         override def apply[A](a: ⇒ A) = Process.eval(Task(a))
 
@@ -124,8 +124,8 @@ package object mongo3 {
           }
       }
 
-    implicit def IOAction: MInstruction[IO] =
-      new MInstruction[IO] {
+    implicit def IOAction: Effect[IO] =
+      new Effect[IO] {
         override val logger = Logger.getLogger("io")
         override def apply[A](a: ⇒ A): IO[A] = IO(a)
         override def effect[A](client: MongoClient, db: String, c: String, q: DBObject): IO[A] =
@@ -149,7 +149,7 @@ package object mongo3 {
     override def bind[A, B](fa: Future[A])(f: (A) ⇒ Future[B]): Future[B] = fa.flatMap(f)
   }
 
-  implicit class MongoInstructionsSyntax[A](val q: FreeMongoIO[A]) extends AnyVal {
+  implicit class MongoInstructionsSyntax[A](val q: Dsl[A]) extends AnyVal {
     import Kleisli._
     type Transformation[M[_]] = MongoIO ~> ({ type λ[x] = Kleisli[M, MongoClient, x] })#λ
 
@@ -158,17 +158,17 @@ package object mongo3 {
     //Monad[Observer] and MInstruction[Observer] or
     //Monad[IO] and MInstruction[IO] or
     //Monad[Process] and MInstruction[Process]
-    def into[M[_]: scalaz.Monad: MInstruction](implicit ex: ExecutorService): Kleisli[M, MongoClient, A] =
-      runFC[MongoIO, ({ type λ[x] = Kleisli[M, MongoClient, x] })#λ, A](q)(evaluate[M](implicitly[MInstruction[M]].withExecutor(ex)))
+    def into[M[_]: scalaz.Monad: Effect](implicit ex: ExecutorService): Kleisli[M, MongoClient, A] =
+      runFC[MongoIO, ({ type λ[x] = Kleisli[M, MongoClient, x] })#λ, A](q)(evaluate[M](implicitly[Effect[M]].withExecutor(ex)))
 
-    private def evaluate[M[_]](evaluator: MInstruction[M]) = new Transformation[M] {
+    private def evaluate[M[_]](evaluator: Effect[M]) = new Transformation[M] {
       val logger = evaluator.logger()
 
       private def toKleisli[A](f: MongoClient ⇒ A): Kleisli[M, MongoClient, A] =
         kleisli(client ⇒ evaluator(f(client)))
 
       override def apply[A](fa: MongoIO[A]): Kleisli[M, MongoClient, A] = fa match {
-        case FindOne(db, c, q) ⇒ toKleisli { client ⇒
+        case FindOne(db, c, q) ⇒ toKleisli { client: MongoClient ⇒
           val coll = client.getDB(db).getCollection(c)
           val r = coll.findOne(q)
           logger.info(s"Find-One: $r")
@@ -191,21 +191,21 @@ package object mongo3 {
     }
   }
 
-  trait MongoInstructions {
+  trait MongoProgram {
     def dbName: String
 
-    def find(query: DBObject)(implicit collection: String): FreeMongoIO[DBObject] =
+    def find(query: DBObject)(implicit collection: String): Dsl[DBObject] =
       Free.liftFC[MongoIO, DBObject](Find(dbName, collection, query))
 
-    def findOne(query: DBObject)(implicit collection: String): FreeMongoIO[DBObject] =
+    def findOne(query: DBObject)(implicit collection: String): Dsl[DBObject] =
       Free.liftFC[MongoIO, DBObject](FindOne(dbName, collection, query))
 
-    def insert(insertObj: DBObject)(implicit collection: String): FreeMongoIO[DBObject] =
+    def insert(insertObj: DBObject)(implicit collection: String): Dsl[DBObject] =
       Free.liftFC[MongoIO, DBObject](Insert(dbName, collection, insertObj))
   }
 
-  object MongoInstructions {
-    def apply(db: String) = new MongoInstructions {
+  object MongoProgram {
+    def apply(db: String) = new MongoProgram {
       override val dbName = db
     }
   }

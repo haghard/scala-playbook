@@ -1,4 +1,3 @@
-
 /**
  *
  * Slightly modified example From: Debasish Ghosh.Functional and Reactive Domain Modeling MEAP
@@ -9,6 +8,7 @@ package object banking {
   import Scalaz._
   import java.util.Calendar
   import java.util.Date
+  import scalaz.concurrent.Task
 
   type Amount = BigDecimal
 

@@ -33,6 +33,8 @@ trait MongoEnviroment extends org.specs2.mutable.Before {
 }
 
 class Mongo3AlgSpec extends Specification {
+
+  import mongo3. { MongoProgram => Program }
   implicit val collection = "testCollection"
   implicit val executor = newFixedThreadPool(4, new NamedThreadFactory("mongo-action"))
 
@@ -46,7 +48,7 @@ class Mongo3AlgSpec extends Specification {
   "mongo3.Program fetch single result with Task" in new MongoEnviroment {
     def query(id: Int) = new BasicDBObject("catId", id)
 
-    val program = MongoInstructions(collection)
+    val program = Program(collection)
     val exp = for {
       id ← (program insert dynamic)
       rs ← (program findOne query(id.get("catId").asInstanceOf[Int]))
@@ -67,7 +69,7 @@ class Mongo3AlgSpec extends Specification {
   "mongo3.Program fetch single result with IO" in new MongoEnviroment {
     def query(id: Int) = new BasicDBObject("catId", id)
 
-    val program = MongoInstructions(collection)
+    val program = Program(collection)
     val exp = for {
       id ← (program insert dynamic)
       rs ← (program findOne query(id.get("catId").asInstanceOf[Int]))
@@ -84,7 +86,7 @@ class Mongo3AlgSpec extends Specification {
   "mongo3.Program fetch single result with Future" in new MongoEnviroment {
     def query(id: Int) = new BasicDBObject("catId", id)
 
-    val program = MongoInstructions(collection)
+    val program = Program(collection)
     val exp = for {
       id ← program insert dynamic
       rs ← (program findOne query(id.get("catId").asInstanceOf[Int]))
@@ -100,7 +102,7 @@ class Mongo3AlgSpec extends Specification {
 
   "mongo3.Program fetch single result with Observable" in new MongoEnviroment {
     def query(id: Int) = new BasicDBObject("catId", id)
-    val program = MongoInstructions(collection)
+    val program = Program(collection)
 
     val exp = for {
       id ← program insert dynamic
@@ -118,7 +120,7 @@ class Mongo3AlgSpec extends Specification {
     type PTask[X] = Process[Task, X]
 
     def query(id: Int) = new BasicDBObject("catId", id)
-    val program = MongoInstructions(collection)
+    val program = Program(collection)
 
     val exp = for {
       id ← program insert dynamic
@@ -139,7 +141,7 @@ class Mongo3AlgSpec extends Specification {
     def query(id: Int) = new BasicDBObject("catId", new BasicDBObject("$gte", id))
 
     val latch = new CountDownLatch(1)
-    val program = MongoInstructions("testDB")
+    val program = Program("testDB")
 
     def insert(i: Int) = for {
       _ ← program.insert(dynamic(600 + i))
@@ -167,7 +169,7 @@ class Mongo3AlgSpec extends Specification {
     val Size = 150
     val logger = Logger.getLogger("Observable-Consumer")
     def query(id: Int) = new BasicDBObject("catId", new BasicDBObject("$gt", id))
-    val program = MongoInstructions("testDB")
+    val program = Program("testDB")
 
     def insert(i: Int) = for {
       _ ← program.insert(dynamic(600 + i))
@@ -205,7 +207,7 @@ class Mongo3AlgSpec extends Specification {
   "mongo3.Program batching with Task" in new MongoEnviroment {
     def query(id: Int) = new BasicDBObject("catId", new BasicDBObject("$gt", id))
 
-    val program = MongoInstructions(collection)
+    val program = Program(collection)
 
     val exp = for {
       _ ← program insert dynamic
@@ -228,7 +230,7 @@ class Mongo3AlgSpec extends Specification {
   "mongo3.Program batching with IO" in new MongoEnviroment {
     def query(id: Int) = new BasicDBObject("catId", new BasicDBObject("$gt", id))
 
-    val program = MongoInstructions(collection)
+    val program = Program(collection)
 
     val exp = for {
       _ ← program insert dynamic
@@ -247,7 +249,7 @@ class Mongo3AlgSpec extends Specification {
   "mongo3.Program batching results with Future" in new MongoEnviroment {
     def query(id: Int) = new BasicDBObject("catId", new BasicDBObject("$gt", id))
 
-    val program = MongoInstructions(collection)
+    val program = Program(collection)
 
     val exp = for {
       _ ← program insert dynamic
