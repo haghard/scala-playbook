@@ -40,7 +40,6 @@ class DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCart
       //because you can't delete a product that hasn't been added
       //So we just add cancellation in the end
 
-      //What would happpen if  add|remove with same product-uuid was concurrent ????????????. Why is the winner ?
       val commandsP = P.emitAll(p.map("add-product-" + _) ++ cancelled.map("drop-product-" + p(_))).toSource
 
       val commandsWriter = (commandsP to commands.enqueue).drain.onComplete(Process.eval_(commands.close))

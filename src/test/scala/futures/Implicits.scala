@@ -2,7 +2,7 @@ package futures
 
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext
-import scala.util.{Failure, Success}
+import scala.util.{ Failure, Success }
 
 object Implicits {
   import scala.concurrent.Future
@@ -24,22 +24,22 @@ object Implicits {
 
     def withTimeoutFail(implicit duration: Duration, ex: ExecutionContext): Future[T] = {
       Future.firstCompletedOf(Seq(inner, timeout(duration.toMillis))).map {
-        case false => throw new Exception("IO timeout")
-        case result: T => result
+        case false     ⇒ throw new Exception("IO timeout")
+        case result: T ⇒ result
       }
     }
 
-    def withFallbackStrategy(fallBackAction: => Future[T])(implicit ex: ExecutionContext): Future[T] =
+    def withFallbackStrategy(fallBackAction: ⇒ Future[T])(implicit ex: ExecutionContext): Future[T] =
       inner recoverWith {
-        case e: Throwable => {
+        case e: Throwable ⇒ {
           println(e.getMessage)
-          fallBackAction recoverWith { case _ => inner }
+          fallBackAction recoverWith { case _ ⇒ inner }
         }
       }
 
     def withLatencyLogging(name: String)(implicit ex: ExecutionContext): Future[T] = {
       val startTime = System.currentTimeMillis
-      inner map { r =>
+      inner map { r ⇒
         val latency = System.currentTimeMillis - startTime
         println(s"Future $name took $latency ms to process")
         r
@@ -47,13 +47,11 @@ object Implicits {
     }
   }
 
-  private def retry[T](n: Int)(f: ⇒ Future[T])
-                      (implicit duration: Duration, ex: ExecutionContext): Future[T] = {
+  private def retry[T](n: Int)(f: ⇒ Future[T])(implicit duration: Duration, ex: ExecutionContext): Future[T] = {
     if (n > 0) f.withTimeoutFail.withFallbackStrategy(retry(n - 1)(f))
     else Future.successful[T](null.asInstanceOf[T])
   }
 
-  def executeWithRetry[T](n: Int)(f: ⇒ Future[T])
-                         (implicit duration: Duration, ex: ExecutionContext) = retry(n)(f)
+  def executeWithRetry[T](n: Int)(f: ⇒ Future[T])(implicit duration: Duration, ex: ExecutionContext) = retry(n)(f)
 
 }

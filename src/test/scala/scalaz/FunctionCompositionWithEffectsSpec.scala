@@ -50,7 +50,6 @@ class FunctionCompositionWithEffectsSpec extends Specification {
 
   //_ ← logF(s"[$cName] fetched address $address for user $user")
 
-
   //Modes from Rapture !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   /**

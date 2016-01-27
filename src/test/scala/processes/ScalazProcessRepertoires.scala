@@ -346,7 +346,6 @@ class ScalazProcessRepertoires extends Specification {
     }
   }
 
-
   //this terminates after any side terminate
   def eitherHaltBoth[I, I2]: Wye[I, I2, I \/ I2] =
     wye.receiveBoth {

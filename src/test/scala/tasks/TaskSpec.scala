@@ -274,25 +274,26 @@ class TaskSpec extends FlatSpec with org.scalatest.Matchers {
     thrown.getMessage shouldEqual "oem"
   }
 
-  "Ackermann with Task and limited stack" should "run" in  {
+  "Ackermann with Task and limited stack" should "run" in {
     //http://blog.higher-order.com/blog/2015/06/18/easy-performance-wins-with-scalaz/
     import scalaz.concurrent.Task, Task._
 
     def ackermann(m: Int, n: Int): Task[Int] = {
       (m, n) match {
-        case (0, _) => now(n + 1)
-        case (m, 0) => suspend(ackermann(m - 1, 1))
-        case (m, n) =>
-          suspend(ackermann(m, n - 1)).flatMap { x =>
-            suspend(ackermann(m - 1, x)) }
+        case (0, _) ⇒ now(n + 1)
+        case (m, 0) ⇒ suspend(ackermann(m - 1, 1))
+        case (m, n) ⇒
+          suspend(ackermann(m, n - 1)).flatMap { x ⇒
+            suspend(ackermann(m - 1, x))
+          }
       }
     }
 
     /**
-      * In ackermann we’re making too many jumps back to the trampoline with suspend.
-      * We don’t actually need to suspend and return control to the trampoline at each step.
-      * We only need to do it enough times to avoid overflowing the stack.
-      */
+     * In ackermann we’re making too many jumps back to the trampoline with suspend.
+     * We don’t actually need to suspend and return control to the trampoline at each step.
+     * We only need to do it enough times to avoid overflowing the stack.
+     */
     val maxStack = 256
     def ackermannO(m: Int, n: Int): Task[Int] = {
       def step(m: Int, n: Int, stack: Int): Task[Int] =
@@ -301,11 +302,11 @@ class TaskSpec extends FlatSpec with org.scalatest.Matchers {
 
       def go(m: Int, n: Int, stack: Int): Task[Int] =
         (m, n) match {
-          case (0, _) => now(n + 1)
-          case (m, 0) => step(m - 1, 1, stack)
-          case (m, n) => for {
-            internalRec <- step(m, n - 1, stack)
-            result      <- step(m - 1, internalRec, stack)
+          case (0, _) ⇒ now(n + 1)
+          case (m, 0) ⇒ step(m - 1, 1, stack)
+          case (m, n) ⇒ for {
+            internalRec ← step(m, n - 1, stack)
+            result ← step(m - 1, internalRec, stack)
           } yield result
         }
 

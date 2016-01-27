@@ -10,7 +10,7 @@ class ScalazTree extends Specification {
 
   implicit val Executor = java.util.concurrent.Executors.newFixedThreadPool(4, new NamedThreadFactory("pTree"))
 
-  def monoidPar[T: Monoid, M[_]: Monad : Nondeterminism]: Monoid[M[T]] = new Monoid[M[T]] {
+  def monoidPar[T: Monoid, M[_]: Monad: Nondeterminism]: Monoid[M[T]] = new Monoid[M[T]] {
     val m = implicitly[Monoid[T]]
     val M = implicitly[Monad[M]]
     val ND = implicitly[Nondeterminism[M]]

@@ -34,7 +34,7 @@ trait MongoEnviroment extends org.specs2.mutable.Before {
 
 class Mongo3AlgSpec extends Specification {
 
-  import mongo3. { MongoProgram => Program }
+  import mongo3.{ MongoProgram ⇒ Program }
   implicit val collection = "testCollection"
   implicit val executor = newFixedThreadPool(4, new NamedThreadFactory("mongo-action"))
 
