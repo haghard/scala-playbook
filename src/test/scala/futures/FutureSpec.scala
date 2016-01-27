@@ -9,6 +9,7 @@ import org.specs2.mutable.Specification
 import scala.concurrent._
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.forkjoin.ThreadLocalRandom
 import scala.util.{ Failure, Success }
 
 class FutureSpec extends Specification {
@@ -26,7 +27,8 @@ class FutureSpec extends Specification {
    * across them all (Thread.interrupted() is only for a single Thread.)
    *
    * Only report successful cancellation if both interruption AND completion is successful
-   * @param cb
+    *
+    * @param cb
    * @param ex
    * @tparam T
    * @return
@@ -199,6 +201,7 @@ class FutureSpec extends Specification {
     }
   }
 
+
   /*
   http://quantifind.com/blog/2015/06/throttling-instantiations-of-scala-futures-1/
   val numWorkers = sys.runtime.availableProcessors
@@ -216,4 +219,58 @@ class FutureSpec extends Specification {
     )
   )
   */
+
+  import Implicits._
+
+  case class CrawlJob(val name: String, val url: String)(block: String => Future[String]) extends (() => Future[String]) {
+    override def apply() = {
+      block(url)
+    }
+  }
+
+  "Futures retry with foldRight" should {
+    "have run" in {
+      implicit val timeout = new FiniteDuration(3, TimeUnit.SECONDS)
+
+      def failed = () => Future.successful("error")
+
+      def flow: (() => Future[String], () => Future[String]) => (() => Future[String]) =
+        ((block: () => Future[String], acc: () => Future[String]) =>
+          (() => {
+            block().withTimeoutFail.withLatencyLogging("movies").withFallbackStrategy { acc() }
+          } ))
+
+      val actions = List.fill(5)("http://192.168.0.1/movies").map(url => CrawlJob(url, url) { url =>
+        Future {
+          println(s"connect to $url")
+          val artificalLatency = ThreadLocalRandom.current().nextInt(2500, 4000)
+          println(artificalLatency)
+          Thread.sleep(artificalLatency)
+          "cle.okc"
+        }
+      })
+
+      val r = actions.foldRight(failed){flow}()
+      println(Await.result(r, new FiniteDuration(20, TimeUnit.SECONDS)))
+
+      1 === 1
+    }
+  }
+
+  "Futures retry " should {
+    "have run" in {
+      val r = executeWithRetry(5) {
+        Future {
+          println(s"connect to http://192.168.0.1/movies")
+          val artificalLatency = ThreadLocalRandom.current().nextInt(2500, 4000)
+          println(artificalLatency)
+          Thread.sleep(artificalLatency)
+          "cle.okc"
+        }
+      }
+
+      println(Await.result(r, new FiniteDuration(20, TimeUnit.SECONDS)))
+      1 === 1
+    }
+  }
 }
