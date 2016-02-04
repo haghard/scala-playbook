@@ -88,7 +88,7 @@ class ScalazProcessRepertoires extends Specification {
     }
   }
 
-  "Parallel map-reduce through queue" should {
+  "Parallel map-reduce/countByValue using queue" should {
     "word count with monoid" in {
       import scalaz._
       import Scalaz._
@@ -109,18 +109,18 @@ class ScalazProcessRepertoires extends Specification {
         (inWords to q.enqueue)
           .onComplete(Process.eval_ { PLogger.info("All input was scheduled. Close queue"); q.close })
 
-      val mappers: Process[Task, Process[Task, Map[String, Int]]] =
+      val countByValue: Process[Task, Process[Task, Map[String, Int]]] =
         P.range(0, mSize) map { i ⇒
-          PLogger.info(s"Start mapper process №$i")
+          PLogger.info(s"Start receiver №$i")
           q.dequeue.map { line ⇒
             val m = line.split(" ").toList.foldMap(i ⇒ Map(i -> 1))
-            PLogger.info(s"Mapper input: $line  out: $m")
+            PLogger.info(s"Received : $line  out: $m")
             m
           }
         }
 
       val out: IndexedSeq[Map[String, Int]] =
-        (qWriter.drain merge scalaz.stream.merge.mergeN(mSize)(mappers)(S))
+        (qWriter.drain merge scalaz.stream.merge.mergeN(mSize)(countByValue)(S))
           .foldMonoid[Map[String, Int]]
           .runLog.run
 
