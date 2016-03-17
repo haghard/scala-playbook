@@ -1,12 +1,9 @@
 package futures
 
-import scala.annotation.tailrec
-import scala.concurrent.ExecutionContext
-import scala.util.{ Failure, Success }
-
 object Implicits {
   import scala.concurrent.Future
   import scala.concurrent.duration.Duration
+  import scala.concurrent.ExecutionContext
 
   implicit class RichFutures[T](val inner: Future[T]) extends AnyVal {
     private def timeout(t: Long): Future[Boolean] = {
@@ -52,6 +49,7 @@ object Implicits {
     else Future.successful[T](null.asInstanceOf[T])
   }
 
-  def executeWithRetry[T](n: Int)(f: ⇒ Future[T])(implicit duration: Duration, ex: ExecutionContext) = retry(n)(f)
+  def executeWithRetry[T](n: Int)(f: ⇒ Future[T])(implicit duration: Duration, ex: ExecutionContext) =
+    retry(n)(f)
 
 }
