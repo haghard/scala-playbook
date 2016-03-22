@@ -22,7 +22,7 @@ class DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCart
       ShoppingCartLog.info("Products: " + p + " cancelled: " + cancelled)
 
       val collector = new TrieMap[Int, Set[String]]
-      type RType[T] = akka.contrib.datareplication.ORSet[T]
+      type CRDT[T] = akka.contrib.datareplication.ORSet[T]
 
       val RCore = Strategy.Executor(newFixedThreadPool(Runtime.getRuntime.availableProcessors(), new RThreadFactory("shopping-cart-thread")))
 
@@ -44,10 +44,10 @@ class DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCart
 
       val commandsWriter = (commandsP to commands.enqueue).drain.onComplete(Process.eval_(commands.close))
 
-      val replicator = replicationChannelFor[RType, String](RCore)
+      val replicator = replicationSignal[CRDT, String](RCore)
 
       (commandsWriter merge
-        replicas.dequeue.map { Replica[RType, String](_, commands, replicator).run(collector).runAsync { _ ⇒ latch.countDown() } })(R)
+        replicas.dequeue.map { Replica[CRDT, String](_, commands, replicator).run(collector).runAsync { _ ⇒ latch.countDown() } })(R)
         .run.run
 
       latch.await()

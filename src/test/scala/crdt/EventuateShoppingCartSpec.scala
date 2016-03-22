@@ -21,7 +21,7 @@ class EventuateShoppingCartSpec extends Properties("ShoppingCart") {
   import Replication._
 
   property("Eventuate ORSet") = forAll { (products: Vector[String], cancelled: List[Int]) ⇒
-    ShoppingCartLog.info("Products: " + products + " Rejected: " + cancelled)
+    ShoppingCartLog.info(s"Products: $products Cancelled: $cancelled")
 
     val sink = new TrieMap[Int, Set[String]]
     type RType[T] = com.rbmhtechnology.eventuate.crdt.ORSet[T]
@@ -44,7 +44,7 @@ class EventuateShoppingCartSpec extends Properties("ShoppingCart") {
     val commandsWriter = (commandsP to commands.enqueue).drain.onComplete(Process.eval_(commands.close))
 
     val RCore = Strategy.Executor(newFixedThreadPool(Runtime.getRuntime.availableProcessors(), new RThreadFactory("shopping-cart-thread")))
-    val replicationChannel = replicationChannelFor[RType, String](RCore)
+    val replicationChannel = replicationSignal[RType, String](RCore)
 
     (commandsWriter merge
       replicas.dequeue.map { n ⇒

@@ -36,7 +36,7 @@ resolvers += "Scalaz Bintray Repo" at "http://dl.bintray.com/scalaz/releases"
 
 resolvers += "tpolecat" at "http://dl.bintray.com/tpolecat/maven"
 
-resolvers += "RichRelevance Bintray" at "http://dl.bintray.com/rr/releases"
+resolvers += "rbmhtechnology" at "https://dl.bintray.com/rbmhtechnology/maven"
 
 resolvers += "octalmind"             at "https://dl.bintray.com/guillaumebreton/maven"
 
@@ -48,7 +48,6 @@ resolvers += "oncue.releases" at "http://dl.bintray.com/oncue/releases/"
 
 resolvers += Resolver.url("ambiata-oss", new URL("https://ambiata-oss.s3.amazonaws.com"))(Resolver.ivyStylePatterns)
 
-//resolvers += "haghard-bintray"    at "http://dl.bintray.com/haghard/releases"
 libraryDependencies ++= Seq(
     "org.mongodb"         %  "mongo-java-driver"   %  "3.0.2"  withSources(),
     "org.scalaz.stream"   %% "scalaz-stream"       %  "0.8"    withSources(), //"0.7.3a"
@@ -61,7 +60,7 @@ libraryDependencies ++= Seq(
     "org.scodec"          %% "scodec-stream"       % "0.10.0",
     "com.twitter"         %% "util-core"           % "6.23.0",
     "com.google.guava"    %  "guava"               % "18.0",
-    "com.rbmhtechnology"  %% "eventuate"           % "0.5",
+    "com.rbmhtechnology"  %% "eventuate-crdt"      % "0.6",
     "com.github.patriknw" %% "akka-data-replication" % "0.11",
     //"com.nrinaudo"        %% "scalaz-stream-csv"   % "0.1.3",
     "com.twitter"         %% "scalding-core"       % "0.15.0",

@@ -32,7 +32,7 @@ class EventuateConcurrentVersionsSpec extends Specification {
 
       cvt.update("D", vectorTime3(1, 1, 0))
 
-      val pickedValue = cvt.all(0).updateTimestamp
+      val pickedValue = cvt.all(0).vectorTimestamp
       //val pickedValue = cvt.all(1).updateTimestamp
       cvt.conflict === true
 
@@ -40,7 +40,7 @@ class EventuateConcurrentVersionsSpec extends Specification {
       cvt.all(0).value === "A-B-C"
       cvt.all(1).value === "A-D"
 
-      val merged = cvt.all.map(_.updateTimestamp).reduce(_ merge _) //vectorTime(1,1,1)
+      val merged = cvt.all.map(_.vectorTimestamp).reduce(_ merge _) //vectorTime(1,1,1)
 
       println(s"Picked: $pickedValue")
       println(s"All: ${cvt.all}")
@@ -55,4 +55,36 @@ class EventuateConcurrentVersionsSpec extends Specification {
       //cvt.all(0) === Versioned("A-D",vectorTime(1,1,1))
     }
   }
+
+  /*
+  "ORSet" should {
+    "merge 3" in {
+      val state = com.rbmhtechnology.eventuate.crdt.ORSet[String]()
+
+      //localTime = s.versionedEntries./:(localTime)(_ merge _.vectorTimestamp).increment(product)
+      val add1 = state.add("a", vectorTime1(1))
+
+      //all.map(_.vectorTimestamp).reduce(_ merge _), all.map(_.systemTimestamp).max
+
+      add1.versionedEntries.map(_.vectorTimestamp)
+        //scan(false)(_.vectorTimestamp.conc(_))
+
+        //.add("b", vectorTime1(1))
+        //.add("c", vectorTime1(1))
+
+
+      val res = add1.value
+
+      res.size === 3
+      res === Set("a","b","c")
+
+      /*
+      LoggerE.info(s"Local history on $num: $localTime")
+      LoggerE.info(s"History of merge on $num: ${set.versionedEntries}")
+      LoggerE.info(s"Purchases on $num: ${set.versionedEntries.map(_.value)}")
+      set.value
+      */
+
+    }
+  }*/
 }
