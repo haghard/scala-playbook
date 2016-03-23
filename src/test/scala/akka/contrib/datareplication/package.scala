@@ -1,10 +1,12 @@
 package akka.contrib.datareplication
 
-import akka.actor.Address
-import org.apache.log4j.Logger
 import _root_.crdt.Replication._
+import akka.actor.Address
 import akka.cluster.UniqueAddress
-import com.rbmhtechnology.eventuate.{ ConcurrentVersionsTree, crdt, VectorTime }
+import com.rbmhtechnology.eventuate.VectorTime
+import org.apache.log4j.Logger
+
+import scalaz.concurrent.{ Strategy, Task }
 
 object Replicas {
 
@@ -26,7 +28,9 @@ object Replicas {
   }*/
 
   implicit def scalaCrdtLWWSet() = new Replica[io.dmitryivanov.crdt.sets.LWWSet, String] {
+
     import io.dmitryivanov.crdt.sets.LWWSet.ElementState
+
     private val logger = Logger.getLogger("scala-crdt-replica")
 
     override def converge(op: String, crdt: io.dmitryivanov.crdt.sets.LWWSet[String]): io.dmitryivanov.crdt.sets.LWWSet[String] =
@@ -49,7 +53,9 @@ object Replicas {
   }
 
   implicit def scalaCrdtLWWState() = new Replica[LWWCrdtState, String] {
+
     import io.dmitryivanov.crdt.sets.LWWSet.ElementState
+
     private val logger = Logger.getLogger("scala-crdt-replica")
 
     override def converge(op: String, crdtState: LWWCrdtState[String]): LWWCrdtState[String] =
@@ -124,7 +130,7 @@ object Replicas {
     private val LoggerAkka = Logger.getLogger("akka-replica")
     private val node = UniqueAddress(Address("akka.tcp", "ecom-system", "localhost", 5000 + replicaNum), replicaNum)
 
-    override def converge(cmd: String, s: ORSet[String]): ORSet[String] = {
+    override def converge(cmd: String, s: akka.contrib.datareplication.ORSet[String]): akka.contrib.datareplication.ORSet[String] = {
       cmd match {
         case ADD(product) ⇒
           val vc = s.add(node, product)
@@ -137,9 +143,13 @@ object Replicas {
       }
     }
 
-    override protected def lookup(crdt: ORSet[String]): Set[String] = {
+    override protected def lookup(crdt: akka.contrib.datareplication.ORSet[String]): Set[String] = {
       LoggerAkka.info(s"Purchases history: ${crdt.elementsMap} ")
       crdt.elements
     }
   }
+
+  def akkaAdd(orSet: akka.contrib.datareplication.ORSet[String], node: UniqueAddress, prod: String) = orSet.add(node, prod)
+
+  def akkaRemove(orSet: akka.contrib.datareplication.ORSet[String], node: UniqueAddress, prod: String) = orSet.remove(node, prod)
 }

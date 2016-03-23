@@ -3,6 +3,9 @@ package crdt
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors._
 
+import akka.actor.Address
+import akka.cluster.UniqueAddress
+import akka.contrib.datareplication.Replicas
 import crdt.Replication._
 import org.specs2.mutable.Specification
 import io.dmitryivanov.crdt.sets._
@@ -59,13 +62,14 @@ class ScalaCrdtSpec extends Specification {
       result must contain("product-EcM", "product-WwQ")
     }
 
-    "Concurrent add/remove Add wins because add biases" in {
+    "Concurrent ops [add|remove] Add wins because add biases" in {
       //ORSet arbitrary additions and removals from the set
       //Property captures causal information in object itself that guarantees correct convergence
       //Add wins(add biases) because we are allowed to remove things that already added
 
       def value[T](key: Int, v: T) = ORSet.ElementState(key.toString, v)
 
+      //Concurrent addition of the item product-EcM
       val result = (new ORSet[String]().add(value(1, "product-EcM")) merge new ORSet[String]().remove(value(2, "product-EcM")))
         .lookup
 
@@ -73,11 +77,12 @@ class ScalaCrdtSpec extends Specification {
       result must contain("product-EcM")
     }
 
-    "Concurrent add/remove add aka Duplication state" in {
+    "Concurrent ops replica-A[add|remove] replica-B[add]" in {
       //Add wins(add biases) because we are allowed to remove things that already added
 
       def value[T](key: Int, v: T) = ORSet.ElementState(key.toString, v)
 
+      //We are allowed to remove elements those we have added
       val one = new ORSet[String]()
         .add(value(1, "product-EcM"))
         .remove(value(1, "product-EcM"))
@@ -89,6 +94,41 @@ class ScalaCrdtSpec extends Specification {
 
       result.size must beEqualTo(1)
       result must contain("product-EcM")
+    }
+  }
+
+  "Akka ORSet" should {
+    "Concurrent ops replica-A[add|remove] replica-B[add]" in {
+      val productName = "product-EcM"
+      val nodeA = UniqueAddress(Address("akka.tcp", "crdt-system", "localhost", 5000), 0)
+      val nodeB = UniqueAddress(Address("akka.tcp", "crdt-system", "localhost", 5001), 1)
+
+      val orSetA = akka.contrib.datareplication.ORSet.create[String]
+      val orSetB = akka.contrib.datareplication.ORSet.create[String]
+
+      val updateA_1 = Replicas.akkaAdd(orSetA, nodeA, productName)
+
+      val updateB_1 = Replicas.akkaAdd(orSetB, nodeB, productName)
+      val updateB_2 = Replicas.akkaRemove(updateB_1, nodeB, productName)
+
+      val merged = (updateA_1 merge updateB_2)
+
+      merged.elements.size must beEqualTo(1)
+      merged.elements must contain(productName)
+    }
+
+    "Concurrent ops [add|remove] Add wins because add biases" in {
+      val productName = "product-EcM"
+      val nodeA = UniqueAddress(Address("akka.tcp", "crdt-system", "localhost", 5000), 0)
+      val nodeB = UniqueAddress(Address("akka.tcp", "crdt-system", "localhost", 5001), 1)
+
+      val orSetA = akka.contrib.datareplication.ORSet.create[String]
+      val orSetB = akka.contrib.datareplication.ORSet.create[String]
+
+      val merged = (Replicas.akkaAdd(orSetA, nodeA, productName) merge Replicas.akkaAdd(orSetB, nodeB, productName))
+
+      merged.elements.size must beEqualTo(1)
+      merged.elements must contain(productName)
     }
   }
 

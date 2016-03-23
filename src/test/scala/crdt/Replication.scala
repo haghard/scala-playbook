@@ -3,8 +3,7 @@ package crdt
 import java.util.concurrent.Executors._
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicInteger
-
-import com.rbmhtechnology.eventuate.{ ConcurrentVersionsTree, Versioned, VectorTime, crdt }
+import com.rbmhtechnology.eventuate.{ ConcurrentVersionsTree, VectorTime }
 
 import scalaz.stream.async
 import scala.language.higherKinds
@@ -30,8 +29,11 @@ object Replication {
     private val threadNumber = new AtomicInteger(1)
     private val group: ThreadGroup = Thread.currentThread().getThreadGroup
 
-    override def newThread(r: Runnable) = new Thread(this.group, r,
-      s"$namePrefix-${threadNumber.getAndIncrement()}", 0L)
+    override def newThread(r: Runnable) = {
+      val th = new Thread(this.group, r, s"$namePrefix-${threadNumber.getAndIncrement()}", 0L)
+      th.setDaemon(true)
+      th
+    }
   }
 
   def genBoundedList[T](size: Int, g: Gen[T]): Gen[List[T]] = Gen.listOfN(size, g)
@@ -51,12 +53,6 @@ object Replication {
       } yield new String(Array(a, b, c))
     ))
 
-  //TODO:
-  trait AsyncReplica[F[_], T] {
-    def update(): Unit
-    def replicate(): Unit
-  }
-
   trait Replica[F[_], T] {
     protected val ADD = """add-(.+)""".r
     protected val DROP = """drop-(.+)""".r
@@ -65,10 +61,10 @@ object Replication {
     protected var queue: Queue[T] = null
     protected var replicationSignal: Signal[F[T]] = null
 
-    private def init(replicaNum0: Int, queue0: Queue[T], signal: Signal[F[T]]): Replica[F, T] = {
-      replicaNum = replicaNum0
+    private def init(replicaNum0: Int, queue0: Queue[T], signal0: Signal[F[T]]): Replica[F, T] = {
       queue = queue0
-      replicationSignal = signal
+      replicaNum = replicaNum0
+      replicationSignal = signal0
       this
     }
 
@@ -84,7 +80,7 @@ object Replication {
         replicationSignal.compareAndSet { state ⇒
           Option(converge(operation, state.get))
         }.runAsync(_ ⇒ ())
-      }.onComplete(P.eval(Task.now(sink += replicaNum -> lookup(replicationSignal.get.run))))
+      }.onComplete(scalaz.stream.Process.eval(Task.now(sink += replicaNum -> lookup(replicationSignal.get.run))))
         .run[Task]
     }
   }
@@ -96,7 +92,10 @@ object Replication {
   case class OrderItemAdded(orderId: String, item: String) extends OrderEvent
   case class OrderItemRemoved(orderId: String, item: String) extends OrderEvent
 
-  case class Order(id: String, items: List[String] = Nil) {
+  trait State {
+    def id: String
+  }
+  case class Order(id: String, items: List[String] = Nil) extends State {
     def addLine(item: String): Order = copy(items = item :: items)
     def removeLine(item: String): Order = copy(items = items.filterNot(_ == item))
     override def toString() = s"[${id}] items=${items.reverse.mkString(",")}"
@@ -115,8 +114,11 @@ object Replication {
 
   object Replica {
 
-    def apply[F[_], T](num: Int, opsQ: Queue[T], replicationSignal: Signal[F[T]])(implicit replica: Replica[F, T]): Replica[F, T] =
-      replica.init(num, opsQ, replicationSignal)
+    /**
+     *
+     */
+    def apply[F[_], T](num: Int, opsQ: Queue[T], replicationChannel: Signal[F[T]])(implicit replica: Replica[F, T]): Replica[F, T] =
+      replica.init(num, opsQ, replicationChannel)
 
     implicit def eventuateCrdt = akka.contrib.datareplication.Replicas.eventuateReplica()
     implicit def akkaCrdt = akka.contrib.datareplication.Replicas.akkaReplica()
@@ -124,14 +126,15 @@ object Replication {
     //ORSet doesn't fix because to be able to remove product you have to perform remove operation on
     //the same node where add was executed
     //implicit def scalaORSet = akka.contrib.datareplication.Replicas.scalaCrdtORSet()
-
     implicit def scalaLWWSet = akka.contrib.datareplication.Replicas.scalaCrdtLWWSet()
     implicit def scalaLWWState = akka.contrib.datareplication.Replicas.scalaCrdtLWWState()
-    implicit def eventuateCv = akka.contrib.datareplication.Replicas.eventuateConcurrentVersions()
+    implicit def eventuateCV = akka.contrib.datareplication.Replicas.eventuateConcurrentVersions()
   }
 
   implicit val zeroEventuateORSet = com.rbmhtechnology.eventuate.crdt.ORSet[String]()
   implicit val zeroAkkaORSet = akka.contrib.datareplication.ORSet.empty[String]
+
+  //implicit val zeroScalaOURSet = new io.dmitryivanov.crdt.sets.OURSet[String]()
   implicit val zeroScalaLWWSet = new io.dmitryivanov.crdt.sets.LWWSet[String]()
   implicit val zeroScalaLLWState = LWWCrdtState(new io.dmitryivanov.crdt.sets.LWWSet[String](), 0l)
   implicit val zeroCVState = ConcurrentVersionsState[OrderEvent]()

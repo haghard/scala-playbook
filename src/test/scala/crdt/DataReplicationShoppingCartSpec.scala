@@ -36,10 +36,6 @@ class DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCart
       replicasN.foreach { replicas.enqueueOne(_).run }
       replicas.close.run
 
-      //We need happens-before order for [add|remove] events with the same product-uuid
-      //because you can't delete a product that hasn't been added
-      //So we just add cancellation in the end
-
       val commandsP = P.emitAll(p.map("add-product-" + _) ++ cancelled.map("drop-product-" + p(_))).toSource
 
       val commandsWriter = (commandsP to commands.enqueue).drain.onComplete(Process.eval_(commands.close))
