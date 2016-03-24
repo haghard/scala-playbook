@@ -46,12 +46,12 @@ class EventuateConcurrentVersionsSpec extends Specification {
       println(s"All: ${cvt.all}")
       println(s"Merged: $merged")
 
-      (cvt resolve (pickedValue, merged))
+      val resolved = (cvt resolve (pickedValue, merged))
 
-      println(cvt.all)
-      cvt.conflict === false
+      println(resolved.all)
+      resolved.conflict === false
 
-      cvt.all(0) === Versioned("A-B-C", merged)
+      resolved.all(0) === Versioned("A-B-C", merged)
       //cvt.all(0) === Versioned("A-D",vectorTime(1,1,1))
     }
   }

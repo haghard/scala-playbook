@@ -70,6 +70,7 @@ libraryDependencies ++= Seq(
     //"com.ambiata"         %% "origami-core"        % Origami,
     //"com.ambiata"         %% "origami-stream"      % Origami
     "io.dmitryivanov"     %% "scala-crdt"          % "1.0", //local build from source
+    "com.rklaehn"         %% "radixtree_sjs0.6"    % "0.2.1", //local build
     "com.propensive"      %% "rapture-base"        % "2.0.0-M2",
     "com.propensive"      %% "rapture-cli"         % "2.0.0-M2",
     "com.propensive"      %% "rapture-json"        % "2.0.0-M2",
