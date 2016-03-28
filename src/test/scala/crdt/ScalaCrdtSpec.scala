@@ -117,7 +117,7 @@ class ScalaCrdtSpec extends Specification {
       merged.elements must contain(productName)
     }
 
-    "Concurrent ops [add|remove] Add wins because add biases" in {
+    "Concurrent ops [add|remove] Add wins because of add biases" in {
       val productName = "product-EcM"
       val nodeA = UniqueAddress(Address("akka.tcp", "crdt-system", "localhost", 5000), 0)
       val nodeB = UniqueAddress(Address("akka.tcp", "crdt-system", "localhost", 5001), 1)

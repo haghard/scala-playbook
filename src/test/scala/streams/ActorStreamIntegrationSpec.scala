@@ -50,7 +50,10 @@ class ActorStreamIntegrationSpec extends TestKit(ActorSystem("Integration"))
     def in: In
     def out: Out
   }
-  case class DomainString[In](val in: In, val out: String) extends Domain[In, String]
+
+  case class StrPackage[In](val in: In, val out: String) extends Domain[In, String]
+
+  case class IntPackage[In](val in: In, val out: Int) extends Domain[In, Int]
 
   sealed trait Protocol {
     type In
@@ -73,8 +76,10 @@ class ActorStreamIntegrationSpec extends TestKit(ActorSystem("Integration"))
     case p: Protocol ⇒
       p.cb(
         \/.right(
-          DomainString(p.value, s"${Thread.currentThread().getName}: Hello from type message ${p.value.getClass.getName}")
-            .asInstanceOf[p.Out]
+          StrPackage(
+            p.value,
+            s"${Thread.currentThread().getName}: Hello from type message ${p.value.getClass.getName}"
+          ).asInstanceOf[p.Out]
         )
       )
 
@@ -97,12 +102,12 @@ class ActorStreamIntegrationSpec extends TestKit(ActorSystem("Integration"))
       val source2: Process[Task, Int] = P.emitAll(Seq.range(1, 11))
 
       Task.fork {
-        (source through scalazActor().scalazChannel[DomainString, Double]).map(_.toString)
+        (source through scalazActor().scalazChannel[StrPackage, Double]).map(_.toString)
           .to(scalaz.stream.io.stdOutLines).run[Task]
       }(S).runAsync(_ ⇒ latch.countDown())
 
       Task.fork {
-        (source2 through scalazActor().scalazChannel[DomainString, Int]).map(_.toString)
+        (source2 through scalazActor().scalazChannel[StrPackage, Int]).map(_.toString)
           .to(scalaz.stream.io.stdOutLines).run[Task]
       }(S).runAsync(_ ⇒ latch.countDown())
 

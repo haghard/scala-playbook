@@ -244,9 +244,7 @@ class BTree[T] private[BTree] (val v: T, val left: Option[BTree[T]], val right: 
    * @return
    */
   def map[B](f: T ⇒ B): BTree[B] =
-    BTree(f(v),
-      left.map(_.map(f)),
-      right.map(_.map(f)))
+    BTree(f(v), left.map(_.map(f)), right.map(_.map(f)))
 
   /**
    * Create new tree with updated values
