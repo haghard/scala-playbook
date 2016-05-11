@@ -26,6 +26,23 @@ class TaskSpec extends FlatSpec with org.scalatest.Matchers {
     loop(n, 0, 1)
   }
 
+  "Mutual tail recursion" should "run" in {
+
+    def odd(n: Int): Task[Boolean] =
+      for {
+        r <- Task.delay(n == 0)
+        x <- if(r) Task.now(false) else even(n-1)
+      } yield x
+
+    def even(n: Int): Task[Boolean] =
+      for {
+        r <- Task.delay(n == 0)
+        x <- if(r) Task.now(true) else odd(n-1)
+      } yield x
+
+    even(100000).attemptRun should === (\/-(true))
+  }
+
   "Run fib" should "in same thread" in {
 
     def fib(n: Int): Task[Int] = n match {
