@@ -16,7 +16,18 @@ class TaskSpec extends FlatSpec with org.scalatest.Matchers {
 
   implicit val executor = new ForkJoinPool(3)
 
+  def fib(n: Int): Int = if(n <= 1) n else fib(n-1) + fib(n-2)
+
+  def fib2(n: Int): BigInt = {
+    @scala.annotation.tailrec
+    def loop(n: Int, a: BigInt, b: BigInt): BigInt =
+      if(n == 0) a else loop(n-1, b, a + b)
+
+    loop(n, 0, 1)
+  }
+
   "Run fib" should "in same thread" in {
+
     def fib(n: Int): Task[Int] = n match {
       case 0 | 1 ⇒ Task now 1
       case n ⇒
@@ -25,8 +36,12 @@ class TaskSpec extends FlatSpec with org.scalatest.Matchers {
           y ← fib(n - 2)
         } yield x + y
     }
+
     //run/attemptRun is like get on Future
     fib(15).attemptRun should ===(\/-(987))
+
+    //the same
+    Task.delay(fib2(16)).attemptRun should ===(\/-(987))
   }
 
   "Run fib with explicitly asking for concurrency" should "run in pool" in {
@@ -293,6 +308,8 @@ class TaskSpec extends FlatSpec with org.scalatest.Matchers {
      * In ackermann we’re making too many jumps back to the trampoline with suspend.
      * We don’t actually need to suspend and return control to the trampoline at each step.
      * We only need to do it enough times to avoid overflowing the stack.
+     * We can then keep track of how many recursive calls we’ve made,
+     * and jump on the trampoline only when we need to. In this case 256
      */
     val maxStack = 256
     def ackermannO(m: Int, n: Int): Task[Int] = {
