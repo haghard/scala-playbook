@@ -16,12 +16,12 @@ class TaskSpec extends FlatSpec with org.scalatest.Matchers {
 
   implicit val executor = new ForkJoinPool(3)
 
-  def fib(n: Int): Int = if(n <= 1) n else fib(n-1) + fib(n-2)
+  def fib(n: Int): Int = if (n <= 1) n else fib(n - 1) + fib(n - 2)
 
   def fib2(n: Int): BigInt = {
     @scala.annotation.tailrec
     def loop(n: Int, a: BigInt, b: BigInt): BigInt =
-      if(n == 0) a else loop(n-1, b, a + b)
+      if (n == 0) a else loop(n - 1, b, a + b)
 
     loop(n, 0, 1)
   }
@@ -30,17 +30,17 @@ class TaskSpec extends FlatSpec with org.scalatest.Matchers {
 
     def odd(n: Int): Task[Boolean] =
       for {
-        r <- Task.delay(n == 0)
-        x <- if(r) Task.now(false) else even(n-1)
+        r ← Task.delay(n == 0)
+        x ← if (r) Task.now(false) else even(n - 1)
       } yield x
 
     def even(n: Int): Task[Boolean] =
       for {
-        r <- Task.delay(n == 0)
-        x <- if(r) Task.now(true) else odd(n-1)
+        r ← Task.delay(n == 0)
+        x ← if (r) Task.now(true) else odd(n - 1)
       } yield x
 
-    even(100000).attemptRun should === (\/-(true))
+    even(100000).attemptRun should ===(\/-(true))
   }
 
   "Run fib" should "in same thread" in {

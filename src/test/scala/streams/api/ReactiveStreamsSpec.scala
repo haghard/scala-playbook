@@ -10,7 +10,7 @@ import scalaz.concurrent.Task
 import scalaz.stream._
 
 class ReactiveStreamsSpec extends WordSpecLike with MustMatchers {
-  import Procesess._
+  import Process._
 
   implicit val E: ExecutorService =
     new ForkJoinPool(Runtime.getRuntime.availableProcessors() * 2)
@@ -65,7 +65,7 @@ class ReactiveStreamsSpec extends WordSpecLike with MustMatchers {
       val sync = new SyncVar[Long]()
       val errors = new AtomicReference[Throwable]
       val source: Process[Task, Int] =
-        (naturals zip Process.repeatEval(Task.delay(Thread.sleep(ThreadLocalRandom.current().nextInt(100, 150))))).map(_._1)
+        (naturals zip scalaz.stream.Process.repeatEval(Task.delay(Thread.sleep(ThreadLocalRandom.current().nextInt(100, 150))))).map(_._1)
 
       val ScalazSource = ScalazPublisher.bounded[Int](source, Size)
 

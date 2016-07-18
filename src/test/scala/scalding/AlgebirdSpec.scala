@@ -3,8 +3,8 @@ package scalding
 import org.specs2.mutable.Specification
 import com.twitter.algebird.{ Monoid ⇒ TwitterMonoid }
 
-class ScaldingSpec extends Specification {
-  val log = org.apache.log4j.Logger.getLogger("scalding")
+class AlgebirdSpec extends Specification {
+  val log = org.apache.log4j.Logger.getLogger("algebird")
 
   case class FollowersGraph[From, To](branches: Set[(From, To)]) {
     def propagate[T: TwitterMonoid](mapping: Map[From, T]): Map[To, T] =
@@ -63,7 +63,7 @@ class ScaldingSpec extends Specification {
     "run" in {
       import com.twitter.algebird.Aggregator.{ max, min, approximatePercentile, uniqueCount, approximateUniqueCount }
       val seq = Seq.range(1, 100)
-      (max[Int] join min[Int] join approximatePercentile[Int](0.9, 10))(seq) === ((99, 1), 89.0)
+      (max[Int] join min[Int] join approximatePercentile[Int](0.9, 10))(seq) === ((99, 1), 90.0)
       (uniqueCount[Int] join approximateUniqueCount[Int])(seq) === (99, 99)
     }
   }

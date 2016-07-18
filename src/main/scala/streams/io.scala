@@ -65,13 +65,13 @@ object io {
       override def request(n: Int): Vector[I] =
         buffer match {
           case list if list.isEmpty ⇒
-            fetchBuffer(n, 0)
+            batch(n, 0)
             readN(n)
           case list ⇒
             if (list.size >= n)
               readN(n)
             else {
-              fetchBuffer(n, 0)
+              batch(n, 0)
               readN(n)
             }
         }
@@ -82,12 +82,12 @@ object io {
         r
       }
 
-      @tailrec def fetchBuffer(n: Int, acc: Int): Unit = {
+      @tailrec def batch(n: Int, acc: Int): Unit = {
         if (cur.isHalt) ()
         else if (n > acc) {
           step()
           if (buffer.size < n)
-            fetchBuffer(n, acc + 1)
+            batch(n, acc + 1)
         } else ()
       }
 

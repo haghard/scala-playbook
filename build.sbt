@@ -18,7 +18,7 @@ name := "scala-playbook"
 
 version := "0.0.1-SNAPSHOT"
 
-scalaVersion := "2.11.7"
+scalaVersion := "2.11.8"
 
 val Akka = "2.4.1"
 val Doobie = "0.2.2"
@@ -57,18 +57,18 @@ libraryDependencies ++= Seq(
     "io.reactivex"        %% "rxscala"             % "0.25.0",
     "org.monifu"          %% "monifu"              % "1.0-M1",
     "log4j"               %  "log4j"               % "1.2.14",
-    "org.scodec"          %% "scodec-stream"       % "0.10.0",
+    //"org.scodec"          %% "scodec-stream"       % "0.10.0",
     "com.twitter"         %% "util-core"           % "6.23.0",
     "com.google.guava"    %  "guava"               % "18.0",
     "com.rbmhtechnology"  %% "eventuate-crdt"      % "0.6",
     "com.github.patriknw" %% "akka-data-replication" % "0.11",
     //"com.nrinaudo"        %% "scalaz-stream-csv"   % "0.1.3",
-    "com.twitter"         %% "scalding-core"       % "0.15.0",
+    //"com.twitter"         %% "scalding-core"       % "0.15.0",
+    "com.twitter"         %% "algebird-core"         % "0.12.1",
     //"au.com.langdale"     %% "flowlib"             % "0.9"
     "oncue.quiver"        %% "core"                % "3.2.1",
     //"org.scalaz.netty"    %% "scalaz-netty"        % "0.2.1",
-    //"com.ambiata"         %% "origami-core"        % Origami,
-    //"com.ambiata"         %% "origami-stream"      % Origami
+    "co.fs2"            %% "fs2-io"            % "0.9.0-M3",
     "io.dmitryivanov"     %% "scala-crdt"          % "1.0", //local build from source
     "com.rklaehn"         %% "radixtree_sjs0.6"    % "0.2.1", //local build
     "com.propensive"      %% "rapture-base"        % "2.0.0-M2",

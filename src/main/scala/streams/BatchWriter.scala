@@ -17,7 +17,7 @@ object BatchWriter {
 /**
  * We start buffering incoming data `WriteRequest` until last request size.
  * After we exceed last request size we will send it to the subscriber (batching),
- * so we bounded there with last request size
+ * so we are limited by last request size
  * @tparam T
  */
 class BatchWriter[T] extends ActorPublisher[T] with ActorLogging {

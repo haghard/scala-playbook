@@ -19,7 +19,7 @@ import scala.concurrent.duration.{ FiniteDuration, Duration }
 import scalaz.stream._
 import scalaz.concurrent.{ Strategy, Task }
 
-class ScalazProcessRepertoires extends Specification {
+class ScalazProcess extends Specification {
   val P = scalaz.stream.Process
   val logger = Logger.getLogger("proc-binding")
 
