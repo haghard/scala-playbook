@@ -11,7 +11,6 @@ ScalariformKeys.preferences := ScalariformKeys.preferences.value
   .setPreference(AlignParameters, true)
   .setPreference(AlignSingleLineCaseStatements, true)
 
-
 organization := "github.com/haghard"
 
 name := "scala-playbook"
@@ -62,11 +61,10 @@ libraryDependencies ++= Seq(
     "com.google.guava"    %  "guava"               % "18.0",
     "com.rbmhtechnology"  %% "eventuate-crdt"      % "0.6",
     "com.github.patriknw" %% "akka-data-replication" % "0.11",
-    //"com.nrinaudo"        %% "scalaz-stream-csv"   % "0.1.3",
-    //"com.twitter"         %% "scalding-core"       % "0.15.0",
     "com.twitter"         %% "algebird-core"         % "0.12.1",
-    //"au.com.langdale"     %% "flowlib"             % "0.9"
     "oncue.quiver"        %% "core"                % "3.2.1",
+    //"com.nrinaudo"        %% "scalaz-stream-csv"   % "0.1.3",
+    //"au.com.langdale"     %% "flowlib"             % "0.9"
     //"org.scalaz.netty"    %% "scalaz-netty"        % "0.2.1",
     "co.fs2"            %% "fs2-io"            % "0.9.0-M3",
     "io.dmitryivanov"     %% "scala-crdt"          % "1.0", //local build from source

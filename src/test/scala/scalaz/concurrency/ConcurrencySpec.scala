@@ -1,7 +1,6 @@
 package scalaz.concurrency
 
 import java.util.concurrent.Executors._
-import java.util.concurrent.atomic.AtomicInteger
 
 import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
@@ -68,7 +67,7 @@ class ConcurrencySpec extends Specification {
     (bob eq r._2) === true
     (alice eq r._1) === true
 
-    //check for object  equality
+    //check for object equality
     (bob == r._2) === true
     (alice == r._1) === true
   }
