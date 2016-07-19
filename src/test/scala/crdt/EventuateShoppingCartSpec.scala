@@ -7,7 +7,7 @@ import scalaz.concurrent.Strategy
 import org.scalacheck.Prop._
 import org.scalacheck.Properties
 
-import com.twitter.util.CountDownLatch
+import java.util.concurrent.CountDownLatch
 import scalaz.stream.{ Process, async }
 import scala.collection.concurrent.TrieMap
 

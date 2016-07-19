@@ -13,8 +13,7 @@ import scalaz.effect.IO
 import scalaz.effect.IO._
 
 class ConcurrencySpec extends Specification {
-
-  val logger = Logger.getLogger("concurrent")
+  val logger = Logger.getLogger("scalaz-concurrency")
   val pool = newFixedThreadPool(2, new NamedThreadFactory("helper"))
   implicit val P = Strategy.Executor(pool)
 
@@ -98,44 +97,5 @@ class ConcurrencySpec extends Specification {
   "MVar pingpong" in {
     pingpong()
     1 === 1
-  }
-
-  "Observe Vars changes" should {
-    "have observed only after pair update" in {
-      import com.twitter.util.Var
-      import com.twitter.util.Updatable
-      val N = 100
-      val a, b = Var(0)
-
-      class Counter(n: Int, limit: Int, u: Updatable[Int], sleep: Long) extends Thread {
-        override def run() {
-          var i = 1
-          while (i < limit) {
-            u.update(i)
-            logger.info(s"$n update local var $i")
-            i += 1
-            Thread.sleep(sleep)
-          }
-        }
-      }
-
-      val c = a.flatMap(_ ⇒ b)
-      val acc = new AtomicInteger(-1)
-      c.observe { i ⇒
-        logger.info(s"update notification $i")
-        assert(i === acc.get() + 1)
-        acc.set(i)
-      }
-
-      val ac = new Counter(0, N, a, 50)
-      val bc = new Counter(1, N, b, 70)
-
-      ac.start()
-      bc.start()
-      ac.join()
-      bc.join()
-
-      acc.get === N - 1
-    }
   }
 }

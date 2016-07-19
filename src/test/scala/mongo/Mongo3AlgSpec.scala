@@ -4,7 +4,7 @@ import mongo3._
 import com.mongodb._
 import java.util.concurrent.Executors._
 import java.util.concurrent.TimeUnit
-import com.twitter.util.CountDownLatch
+import java.util.concurrent.CountDownLatch
 import de.bwaldvogel.mongo.MongoServer
 import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger

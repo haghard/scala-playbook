@@ -1,7 +1,6 @@
 package crdt
 
 import java.util.concurrent.Executors._
-import com.twitter.util.CountDownLatch
 import org.scalacheck.Prop._
 import org.scalacheck.{ Gen, Properties }
 
@@ -32,7 +31,7 @@ class DataReplicationShoppingCartSpec extends Properties("ReplicatedShoppingCart
       val purchases = (p.toSet &~ cancelled.map(p(_)).toSet).map("product-" + _)
       ShoppingCartLog.info("Accepted purchases: " + purchases)
 
-      val latch = new CountDownLatch(replicasN.size)
+      val latch = new java.util.concurrent.CountDownLatch(replicasN.size)
       replicasN.foreach { replicas.enqueueOne(_).run }
       replicas.close.run
 
