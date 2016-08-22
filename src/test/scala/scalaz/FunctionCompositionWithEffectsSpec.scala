@@ -384,8 +384,10 @@ class FunctionCompositionWithEffectsSpec extends Specification {
     val logF: String ⇒ W[Unit] =
       r ⇒ logger.info(r).point[W]
 
-    val rMap = flow[W](getUserF, getAddressF, logF)(id).run._1
+    //val rMap = flow[W](getUserF, getAddressF, logF)(id).run._1
     //val rMap = program[({ type λ[x] = Writer[Map[String, String], x] })#λ](getUserF, getAddressF, logF)(id).run._1
+
+    val rMap = flow[Writer[Map[String, String], ?]](getUserF, getAddressF, logF)(id).run._1
 
     rMap.get(id.toString) should be equalTo Some("Sherlock")
     rMap.get("address") should be equalTo Some(Address().street)

@@ -37,7 +37,7 @@ resolvers += "tpolecat" at "http://dl.bintray.com/tpolecat/maven"
 
 resolvers += "rbmhtechnology" at "https://dl.bintray.com/rbmhtechnology/maven"
 
-resolvers += "octalmind"             at "https://dl.bintray.com/guillaumebreton/maven"
+resolvers += "octalmind"         at "https://dl.bintray.com/guillaumebreton/maven"
 
 resolvers += "fristi at bintray" at "http://dl.bintray.com/fristi/maven"
 
@@ -66,7 +66,7 @@ libraryDependencies ++= Seq(
     //"com.nrinaudo"        %% "scalaz-stream-csv"   % "0.1.3",
     //"au.com.langdale"     %% "flowlib"             % "0.9"
     //"org.scalaz.netty"    %% "scalaz-netty"        % "0.2.1",
-    "co.fs2"            %% "fs2-io"            % "0.9.0-M3",
+    "co.fs2"              %% "fs2-io"              % "0.9.0-RC1",
     "io.dmitryivanov"     %% "scala-crdt"          % "1.0", //local build from source
     "com.rklaehn"         %% "radixtree_sjs0.6"    % "0.2.1", //local build
     "com.propensive"      %% "rapture-base"        % "2.0.0-M2",
@@ -107,3 +107,5 @@ javacOptions ++= Seq(
   "-target", "1.7",
   "-Xlint:unchecked",
   "-Xlint:deprecation")
+
+addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.8.0")

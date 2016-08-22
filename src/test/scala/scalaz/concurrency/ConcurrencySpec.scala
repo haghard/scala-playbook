@@ -2,12 +2,14 @@ package scalaz.concurrency
 
 import java.util.concurrent.Executors._
 
+import cats.Id
 import mongo.MongoProgram.NamedThreadFactory
 import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
 
+import scalaz.{ Monad, Applicative, Functor }
 import scalaz.concurrent.MVar._
-import scalaz.concurrent.{ MVar, Strategy }
+import scalaz.concurrent.{ Atomic, MVar, Strategy }
 import scalaz.effect.IO
 import scalaz.effect.IO._
 
@@ -18,6 +20,8 @@ class ConcurrencySpec extends Specification {
 
   case class Foo(name: String)
   def forkIO(f: ⇒ IO[Unit])(implicit s: Strategy): IO[Unit] = IO { s(f.unsafePerformIO); () }
+
+  val io = Atomic.newAtomic(Foo("aliceV1"))
 
   "MVar" should {
     "have deterministic sequential take/put behaviour" in {

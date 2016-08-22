@@ -149,9 +149,10 @@ package object mongo3 {
     override def bind[A, B](fa: Future[A])(f: (A) ⇒ Future[B]): Future[B] = fa.flatMap(f)
   }
 
-  implicit class MongoInstructionsSyntax[A](val q: Dsl[A]) extends AnyVal {
+  implicit class MongoInstructionsSyntax[A](val query: Dsl[A]) extends AnyVal {
     import Kleisli._
-    type Transformation[M[_]] = MongoIO ~> ({ type λ[x] = Kleisli[M, MongoClient, x] })#λ
+    type Transformation[M[_]] = MongoIO ~> Kleisli[M, MongoClient, ?]
+    //MongoIO ~> ({ type λ[x] = Kleisli[M, MongoClient, x] })#λ
 
     //val m = implicitly[scalaz.Monad[M]] lookup
     //Monad[Task] and MInstruction[Task]) or
@@ -159,10 +160,11 @@ package object mongo3 {
     //Monad[IO] and MInstruction[IO] or
     //Monad[Process] and MInstruction[Process]
     def into[M[_]: scalaz.Monad: Effect](implicit ex: ExecutorService): Kleisli[M, MongoClient, A] =
-      runFC[MongoIO, ({ type λ[x] = Kleisli[M, MongoClient, x] })#λ, A](q)(evaluate[M](implicitly[Effect[M]].withExecutor(ex)))
+      //runFC[MongoIO, ({ type λ[x] = Kleisli[M, MongoClient, x] })#λ, A](q)(evaluate[M](implicitly[Effect[M]].withExecutor(ex)))
+      runFC[MongoIO, Kleisli[M, MongoClient, ?], A](query)(evaluate[M](implicitly[Effect[M]].withExecutor(ex))) //because of kind-projector
 
     private def evaluate[M[_]](evaluator: Effect[M]) = new Transformation[M] {
-      val logger = evaluator.logger()
+      val logger = evaluator.logger
 
       private def toKleisli[A](f: MongoClient ⇒ A): Kleisli[M, MongoClient, A] =
         kleisli(client ⇒ evaluator(f(client)))
