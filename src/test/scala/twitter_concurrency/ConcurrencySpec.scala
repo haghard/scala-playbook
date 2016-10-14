@@ -11,14 +11,14 @@ import scala.annotation.tailrec
 class ConcurrencySpec extends Specification {
   val logger = Logger.getLogger("twitter-concurrency")
 
-  "Observe vars changes" should {
-    "have observed only after pair update" in {
+  "Vars changes" should {
+    "be observed correctly" in {
       import com.twitter.util.Var
       import com.twitter.util.Updatable
       val N = 100
-      val a, b = Var(0)
+      val refA, refB = Var(0)
 
-      class Counter(n: Int, limit: Int, u: Updatable[Int], sleep: Long) extends Thread {
+      class Writer(n: Int, limit: Int, u: Updatable[Int], sleep: Long) extends Thread {
         @tailrec
         private def loop(index: Int): Unit = {
           if (index < limit) {
@@ -32,15 +32,16 @@ class ConcurrencySpec extends Specification {
         override def run() = loop(0)
       }
 
-      val c = a.flatMap(_ ⇒ b)
+      val both = refA.join(refB)
+      //val both = refA.flatMap(_ ⇒ refB)
 
-      val acc = new AtomicReference[Int](0)
+      val acc = new AtomicReference[(Int, Int)]((0, 0))
       val w = Witness(acc)
 
-      c.changes.register(w)
+      both.changes.register(w)
 
-      val ac = new Counter(0, N, a, 50)
-      val bc = new Counter(1, N, b, 70)
+      val ac = new Writer(0, N, refA, 50)
+      val bc = new Writer(1, N, refB, 70)
 
       ac.start()
       bc.start()
@@ -48,6 +49,7 @@ class ConcurrencySpec extends Specification {
       bc.join()
 
       acc.get === N - 1
+      //acc.get === (N - 1, N - 1)
     }
   }
 }
