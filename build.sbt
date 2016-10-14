@@ -57,7 +57,7 @@ libraryDependencies ++= Seq(
     "org.monifu"          %% "monifu"              % "1.0-M1",
     "log4j"               %  "log4j"               % "1.2.14",
     //"org.scodec"          %% "scodec-stream"       % "0.10.0",
-    "com.twitter"         %% "util-core"           % "6.23.0",
+    "com.twitter"         %% "util-core"           % "6.38.0",
     "com.google.guava"    %  "guava"               % "18.0",
     "com.rbmhtechnology"  %% "eventuate-crdt"      % "0.6",
     "com.github.patriknw" %% "akka-data-replication" % "0.11",
@@ -66,9 +66,10 @@ libraryDependencies ++= Seq(
     //"com.nrinaudo"        %% "scalaz-stream-csv"   % "0.1.3",
     //"au.com.langdale"     %% "flowlib"             % "0.9"
     //"org.scalaz.netty"    %% "scalaz-netty"        % "0.2.1",
-    "co.fs2"              %% "fs2-io"              % "0.9.0-RC1",
+    "co.fs2"              %% "fs2-io"              % "0.9.1",
     "io.dmitryivanov"     %% "scala-crdt"          % "1.0", //local build from source
-    "com.rklaehn"         %% "radixtree_sjs0.6"    % "0.2.1", //local build
+    //"com.rklaehn"         %% "radixtree_sjs0.6"    % "0.3.0", //local build
+    "com.rklaehn"         %% "radixtree"           % "0.3.0", //local build
     "com.propensive"      %% "rapture-base"        % "2.0.0-M2",
     "com.propensive"      %% "rapture-cli"         % "2.0.0-M2",
     "com.propensive"      %% "rapture-json"        % "2.0.0-M2",

@@ -18,25 +18,24 @@ import rx.lang.scala.schedulers.ExecutionContextScheduler
 import scala.concurrent.forkjoin.ThreadLocalRandom
 import scala.concurrent.{ ExecutionContext, Future }
 import scalaz.concurrent.{ Strategy, Task }
-import java.util.concurrent.atomic.{ AtomicReference ⇒ JavaAtomicReference }
 
 class FunctionCompositionWithEffectsSpec extends Specification {
   val P = scalaz.stream.Process
   val logger = Logger.getLogger("flow")
 
-  final class AtomicRegister[A](init: A) extends JavaAtomicReference[A](init) {
-    @annotation.tailrec def attempt(f: A ⇒ A): A = {
+  final class AtomicRegister[A](init: A) extends java.util.concurrent.atomic.AtomicReference[A](init) {
+    @annotation.tailrec final def attempt(f: A ⇒ A): A = {
       val current = get
       val updated = f(current)
       if (compareAndSet(current, updated)) updated else attempt(f)
     }
 
-    def transact(f: A ⇒ A): Unit = {
+    def update(f: A ⇒ A): Unit = {
       attempt(f)
       ()
     }
 
-    def transactAndGet(f: A ⇒ A): A = attempt(f)
+    def updateAndGet(f: A ⇒ A): A = attempt(f)
   }
 
   def namedTF(name: String) = new ThreadFactory {
@@ -48,16 +47,12 @@ class FunctionCompositionWithEffectsSpec extends Specification {
   case class User(id: Long, name: String, ids: List[Int] = Nil)
   case class Address(street: String = "Baker Street 221B")
 
-  //_ ← logF(s"[$cName] fetched address $address for user $user")
-
-  //Modes from Rapture !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
   /**
    * Acts like
    * {{{
    *  getUserF(id) flatMap { user ⇒
-   *    getUserAddressF(user) flatMap { a ⇒
-   *      logF(s"[${t.runtimeClass.getName}] fetch address $a for user $user").map(_ ⇒ a)
+   *    getUserAddressF(user) flatMap { address ⇒
+   *      logF(s"[${t.runtimeClass.getName}] fetch address $a for user $user").map(_ ⇒ address)
    *   }
    * }
    * }}}
@@ -187,7 +182,7 @@ class FunctionCompositionWithEffectsSpec extends Specification {
           n match {
             case OnNext(v) ⇒
               logF(s"Observable-Consumer receives $v")
-              register.transact {
+              register.update {
                 v :: _
               }
             case OnCompleted  ⇒ latch.countDown
@@ -207,7 +202,7 @@ class FunctionCompositionWithEffectsSpec extends Specification {
           n match {
             case OnNext(v) ⇒
               logF(s"Observable-Consumer receives $v")
-              register.transact {
+              register.update {
                 v :: _
               }
             case OnCompleted  ⇒ latch.countDown

@@ -1,9 +1,12 @@
 package twitter_concurrency
 
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{ AtomicReference, AtomicInteger }
 
+import com.twitter.util.Witness
 import org.apache.log4j.Logger
 import org.specs2.mutable.Specification
+
+import scala.annotation.tailrec
 
 class ConcurrencySpec extends Specification {
   val logger = Logger.getLogger("twitter-concurrency")
@@ -16,24 +19,25 @@ class ConcurrencySpec extends Specification {
       val a, b = Var(0)
 
       class Counter(n: Int, limit: Int, u: Updatable[Int], sleep: Long) extends Thread {
-        override def run() {
-          var i = 1
-          while (i < limit) {
-            u.update(i)
-            logger.info(s"$n update local var $i")
-            i += 1
+        @tailrec
+        private def loop(index: Int): Unit = {
+          if (index < limit) {
+            u.update(index)
+            logger.info(s"$n update local var with $index")
             Thread.sleep(sleep)
-          }
+            loop(index + 1)
+          } else ()
         }
+
+        override def run() = loop(0)
       }
 
       val c = a.flatMap(_ ⇒ b)
-      val acc = new AtomicInteger(-1)
-      c.observe { i ⇒
-        logger.info(s"update notification $i")
-        assert(i === acc.get() + 1)
-        acc.set(i)
-      }
+
+      val acc = new AtomicReference[Int](0)
+      val w = Witness(acc)
+
+      c.changes.register(w)
 
       val ac = new Counter(0, N, a, 50)
       val bc = new Counter(1, N, b, 70)

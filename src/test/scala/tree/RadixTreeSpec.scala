@@ -20,13 +20,19 @@ class RadixTreeSpec extends Specification {
       println(searchTree.show)
 
       //print all english words starting with b and z
-      searchTree.filterPrefix("b").values === List("ball", "bell", "board")
-      searchTree.filterPrefix("z").keys === List("zulu", "zulus", "zuni", "zunis", "zurich", "zwieback", "zwiebacks")
+
+      val b = Seq("ball", "bell", "board")
+      searchTree.filterPrefix("b").values === b
+      searchTree.filterPrefix("b").keys === b
+
+      val z = Seq("zulu", "zulus", "zuni", "zunis", "zurich", "zwieback", "zwiebacks")
+      searchTree.filterPrefix("z").values === z
+      searchTree.filterPrefix("z").keys === z
     }
 
     "word count" in {
       import algebra.ring.AdditiveMonoid
-      import algebra.std.all._
+      import algebra.instances.all._
 
       //val text = scala.io.Source.fromURL("http://classics.mit.edu/Homer/odyssey.mb.txt").getLines
       val text = Array("abcbcd efghjdfsf abcbcd  efghjdfsf abcbcd efghjdfsf", "abcbcd efghjdfsf abcbcd  efghjdfsf abcbcd efghjdfsf")
