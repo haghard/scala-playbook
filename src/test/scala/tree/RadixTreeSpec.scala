@@ -17,6 +17,17 @@ class RadixTreeSpec extends Specification {
       val pairs = words.map(x ⇒ x -> x)
       val searchTree = RadixTree(pairs: _*)
 
+
+      val tree = RadixTree(words.zipWithIndex: _*)
+      //RadixTree(
+      //abacuses->0,abaft->1,abalone->2,abalones->3,abandon->4,
+      //ball->5,bell->6,board->7,
+      //zulu->8,zulus->9,zuni->10,zunis->11,zurich->12,zwieback->13,zwiebacks->14
+      //)
+
+      tree.filterPrefix("abal").values
+
+
       println(searchTree.show)
 
       //print all english words starting with b and z

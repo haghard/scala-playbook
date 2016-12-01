@@ -32,10 +32,11 @@ class ConcurrencySpec extends Specification {
         override def run() = loop(0)
       }
 
-      val both = refA.join(refB)
-      //val both = refA.flatMap(_ ⇒ refB)
+      //val both = refA.join(refB)
+      val both = refA.flatMap(_ ⇒ refB)
 
-      val acc = new AtomicReference[(Int, Int)]((0, 0))
+      //val acc = new AtomicReference[(Int, Int)]((0, 0))
+      val acc = new AtomicReference[Int](0)
       val w = Witness(acc)
 
       both.changes.register(w)

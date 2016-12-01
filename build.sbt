@@ -19,7 +19,7 @@ version := "0.0.1-SNAPSHOT"
 
 scalaVersion := "2.11.8"
 
-val Akka = "2.4.1"
+val Akka = "2.4.14"
 val Doobie = "0.2.2"
 val Origami = "1.0-20150902134048-8d00462"
 
@@ -66,16 +66,17 @@ libraryDependencies ++= Seq(
     //"com.nrinaudo"        %% "scalaz-stream-csv"   % "0.1.3",
     //"au.com.langdale"     %% "flowlib"             % "0.9"
     //"org.scalaz.netty"    %% "scalaz-netty"        % "0.2.1",
-    "co.fs2"              %% "fs2-io"              % "0.9.1",
+    "co.fs2"              %% "fs2-io"              % "0.9.2",
     "io.dmitryivanov"     %% "scala-crdt"          % "1.0", //local build from source
     //"com.rklaehn"         %% "radixtree_sjs0.6"    % "0.3.0", //local build
-    "com.rklaehn"         %% "radixtree"           % "0.3.0", //local build
+    "com.rklaehn"         %% "radixtree"           % "0.4.0",
     "com.propensive"      %% "rapture-base"        % "2.0.0-M2",
     "com.propensive"      %% "rapture-cli"         % "2.0.0-M2",
     "com.propensive"      %% "rapture-json"        % "2.0.0-M2",
     "com.propensive"      %% "rapture-json-spray"  % "2.0.0-M2",
     "com.propensive"      %% "rapture-i18n"        % "2.0.0-M2"
 )
+
 
 libraryDependencies ++= Seq(
   "org.tpolecat"        %% "doobie-core"         % Doobie,

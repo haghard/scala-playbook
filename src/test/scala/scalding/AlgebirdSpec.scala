@@ -16,7 +16,7 @@ class AlgebirdSpec extends Specification {
         }
   }
 
-  def similarity[T](x: Set[T], y: Set[T]) = (x intersect y).size.toDouble / (x union y).size
+  def jaccard[T](x: Set[T], y: Set[T]) = (x intersect y).size.toDouble / (x union y).size
 
   def approxSimilarity[T, H](mh: com.twitter.algebird.MinHasher[H], x: Set[T], y: Set[T]): Double = {
     val sigX = x.map(elem ⇒ mh.init(elem.toString)).reduce(mh.plus(_, _))
@@ -30,11 +30,12 @@ class AlgebirdSpec extends Specification {
       val y = "qwerty1".toSet
 
       val hasher = new com.twitter.algebird.MinHasher32(1.0, 1024)
+
       val sig0 = x.map(elem ⇒ hasher.init(elem.toString)).reduce(hasher.plus(_, _))
       val sig1 = y.map(elem ⇒ hasher.init(elem.toString)).reduce(hasher.plus(_, _))
 
       val hs = BigDecimal(hasher.similarity(sig0, sig1)).setScale(3, BigDecimal.RoundingMode.HALF_UP).toDouble
-      val s = BigDecimal(similarity(x, y)).setScale(3, BigDecimal.RoundingMode.HALF_UP).toDouble
+      val s = BigDecimal(jaccard(x, y)).setScale(3, BigDecimal.RoundingMode.HALF_UP).toDouble
 
       println(s"$hs - $s")
       //hs === approxSimilarity(hasher, x, y)
