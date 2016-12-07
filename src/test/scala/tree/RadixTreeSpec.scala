@@ -17,7 +17,6 @@ class RadixTreeSpec extends Specification {
       val pairs = words.map(x ⇒ x -> x)
       val searchTree = RadixTree(pairs: _*)
 
-
       val tree = RadixTree(words.zipWithIndex: _*)
       //RadixTree(
       //abacuses->0,abaft->1,abalone->2,abalones->3,abandon->4,
@@ -26,7 +25,6 @@ class RadixTreeSpec extends Specification {
       //)
 
       tree.filterPrefix("abal").values
-
 
       println(searchTree.show)
 

@@ -61,7 +61,7 @@ libraryDependencies ++= Seq(
     "com.google.guava"    %  "guava"               % "18.0",
     "com.rbmhtechnology"  %% "eventuate-crdt"      % "0.6",
     "com.github.patriknw" %% "akka-data-replication" % "0.11",
-    "com.twitter"         %% "algebird-core"         % "0.12.1",
+    "com.twitter"         %% "algebird-core"         % "0.12.3",
     "oncue.quiver"        %% "core"                % "3.2.1",
     //"com.nrinaudo"        %% "scalaz-stream-csv"   % "0.1.3",
     //"au.com.langdale"     %% "flowlib"             % "0.9"

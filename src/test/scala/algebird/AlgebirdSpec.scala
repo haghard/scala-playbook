@@ -1,7 +1,7 @@
-package scalding
+package algebird
 
-import org.specs2.mutable.Specification
 import com.twitter.algebird.{ Monoid ⇒ TwitterMonoid }
+import org.specs2.mutable.Specification
 
 class AlgebirdSpec extends Specification {
   val log = org.apache.log4j.Logger.getLogger("algebird")
@@ -60,12 +60,35 @@ class AlgebirdSpec extends Specification {
     }
   }
 
-  "Scalding's aggregators" should {
+  "Aggregators" should {
     "run" in {
-      import com.twitter.algebird.Aggregator.{ max, min, approximatePercentile, uniqueCount, approximateUniqueCount }
+      import com.twitter.algebird.Aggregator.{ approximatePercentile, approximateUniqueCount, max, min, uniqueCount }
       val seq = Seq.range(1, 100)
       (max[Int] join min[Int] join approximatePercentile[Int](0.9, 10))(seq) === ((99, 1), 90.0)
       (uniqueCount[Int] join approximateUniqueCount[Int])(seq) === (99, 99)
+    }
+  }
+
+  "BloomFilter" should {
+    "run" in {
+      import com.twitter.algebird._
+      val NUM_HASHES = 6
+      val WIDTH = 128
+      val SEED = 1
+
+      val M = new BloomFilterMonoid(NUM_HASHES, WIDTH, SEED)
+
+      val blFilter0 = M.create("okc", "lac", "cle", "hou")
+      val blFilter1 = M.create("gsw", "mil", "chi")
+      val all = M.plus(blFilter0, blFilter1)
+
+      all.numHashes === NUM_HASHES
+
+      all.width === WIDTH
+
+      all.contains("mil").isTrue === true
+      all.contains("okc").isTrue === true
+      all.contains("mik").isTrue === false
     }
   }
 }
